@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gesture Shortcuts</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      background: #F9F9F9;
+      color: #1A1A2E;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      touch-action: none;
+    }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      border: 3px solid transparent;
+      transition: border-color 0.2s ease;
+    }
+    #canvas.record-mode {
+      border-color: #E67E22;
+      box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.3);
+    }
+    #canvas.no-match-flash {
+      border-color: #C0392B;
+      animation: borderFlash 0.4s ease-out;
+    }
+    @keyframes borderFlash {
+      to { border-color: transparent; }
+    }
+    .record-label {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      color: #B85C00;
+      font-size: 1.1rem;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 2;
+    }
+    .record-label.visible {
+      opacity: 1;
+    }
+    #feedback-label {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      font-size: 2.5rem;
+      font-weight: 700;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #feedback-label.visible {
+      opacity: 1;
+    }
+    #feedback-label.fade-out {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .btn-float {
+      position: fixed;
+      bottom: 24px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      background: #2E75B6;
+      box-shadow: 0 4px 12px rgba(46, 117, 182, 0.35);
+      touch-action: manipulation;
+      cursor: pointer;
+      z-index: 20;
+    }
+    .btn-float:active {
+      transform: scale(0.98);
+    }
+    #btn-record {
+      left: 24px;
+    }
+    #btn-gestures {
+      right: 24px;
+    }
+    #debug-toggle {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 48px;
+      height: 48px;
+      z-index: 30;
+      touch-action: manipulation;
+    }
+    #debug-panel {
+      position: fixed;
+      top: 48px;
+      left: 12px;
+      right: 12px;
+      max-width: 320px;
+      background: rgba(26, 26, 46, 0.95);
+      color: #F9F9F9;
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-family: monospace;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      z-index: 25;
+      display: none;
+      touch-action: manipulation;
+    }
+    #debug-panel.visible {
+      display: block;
+    }
+    #debug-panel p { margin: 4px 0; }
+    .panel-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 40;
+      display: none;
+      touch-action: manipulation;
+    }
+    .panel-overlay.visible {
+      display: block;
+    }
+    .panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 70vh;
+      background: #F9F9F9;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -8px 32px rgba(0,0,0,0.15);
+      padding: 24px;
+      z-index: 50;
+      touch-action: manipulation;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+    .panel.visible {
+      transform: translateY(0);
+    }
+    .panel h3 {
+      margin: 0 0 16px 0;
+      font-size: 1.2rem;
+      color: #1A1A2E;
+    }
+    .panel input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 1rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      touch-action: manipulation;
+    }
+    .panel button.primary {
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: #2E75B6;
+      border: none;
+      border-radius: 10px;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    .gesture-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    .gesture-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .gesture-list li:last-child { border-bottom: none; }
+    .gesture-list .name { font-weight: 600; color: #1A1A2E; }
+    .gesture-list .action { color: #2E75B6; font-size: 0.9rem; margin-left: 8px; }
+    .gesture-list .delete-btn {
+      padding: 8px 14px;
+      font-size: 0.85rem;
+      color: #C0392B;
+      background: transparent;
+      border: 1px solid #C0392B;
+      border-radius: 8px;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    .gesture-list .delete-btn.builtin { display: none; }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="record-label" class="record-label">Draw your gesture now</div>
+    <div id="feedback-label"></div>
+  </div>
+  <button type="button" class="btn-float" id="btn-record">Record Gesture</button>
+  <button type="button" class="btn-float" id="btn-gestures">Gestures</button>
+  <div id="debug-toggle" title="Toggle debug"></div>
+  <div id="debug-panel">
+    <p><strong>pointerType:</strong> <span id="debug-pointer">—</span></p>
+    <p><strong>Point count:</strong> <span id="debug-points">0</span></p>
+    <p><strong>Last result:</strong> <span id="debug-result">—</span></p>
+    <p><strong>Score:</strong> <span id="debug-score">—</span></p>
+    <p><strong>Recognition time:</strong> <span id="debug-time">—</span> ms</p>
+  </div>
+  <div id="record-overlay" class="panel-overlay"></div>
+  <div id="record-panel" class="panel">
+    <h3>Record new gesture</h3>
+    <input type="text" id="record-name" placeholder="Gesture name" />
+    <button type="button" class="primary" id="record-confirm">Confirm</button>
+  </div>
+  <div id="library-overlay" class="panel-overlay"></div>
+  <div id="library-panel" class="panel">
+    <h3>Gesture library</h3>
+    <ul id="gesture-list" class="gesture-list"></ul>
+  </div>
+
+  <script>
+(function() {
+  'use strict';
+
+  // ——— $1 Unistroke Recognizer (inline, from UW dollar recognizer) ———
+  function Point(x, y) {
+    this.X = x;
+    this.Y = y;
+  }
+  function Rectangle(x, y, width, height) {
+    this.X = x; this.Y = y; this.Width = width; this.Height = height;
+  }
+  function Unistroke(name, points) {
+    this.Name = name;
+    this.Points = Resample(points, NumPoints);
+    var radians = IndicativeAngle(this.Points);
+    this.Points = RotateBy(this.Points, -radians);
+    this.Points = ScaleTo(this.Points, SquareSize);
+    this.Points = TranslateTo(this.Points, Origin);
+    this.Vector = Vectorize(this.Points);
+  }
+  function Result(name, score) {
+    this.Name = name;
+    this.Score = score;
+  }
+  var NumPoints = 64;
+  var SquareSize = 250.0;
+  var Origin = new Point(0, 0);
+  var Diagonal = Math.sqrt(SquareSize * SquareSize + SquareSize * SquareSize);
+  var HalfDiagonal = 0.5 * Diagonal;
+  var AngleRange = (45.0 * Math.PI / 180.0);
+  var AnglePrecision = (2.0 * Math.PI / 180.0);
+  var Phi = 0.5 * (-1.0 + Math.sqrt(5.0));
+
+  function Resample(points, n) {
+    var I = PathLength(points) / (n - 1);
+    var D = 0.0;
+    var newpoints = [points[0]];
+    for (var i = 1; i < points.length; i++) {
+      var d = Distance(points[i - 1], points[i]);
+      if ((D + d) >= I) {
+        var qx = points[i - 1].X + ((I - D) / d) * (points[i].X - points[i - 1].X);
+        var qy = points[i - 1].Y + ((I - D) / d) * (points[i].Y - points[i - 1].Y);
+        newpoints.push(new Point(qx, qy));
+        points.splice(i, 0, new Point(qx, qy));
+        D = 0.0;
+      } else D += d;
+    }
+    if (newpoints.length === n - 1)
+      newpoints.push(new Point(points[points.length - 1].X, points[points.length - 1].Y));
+    return newpoints;
+  }
+  function IndicativeAngle(points) {
+    var c = Centroid(points);
+    return Math.atan2(c.Y - points[0].Y, c.X - points[0].X);
+  }
+  function RotateBy(points, radians) {
+    var c = Centroid(points);
+    var cos = Math.cos(radians), sin = Math.sin(radians);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(
+        (points[i].X - c.X) * cos - (points[i].Y - c.Y) * sin + c.X,
+        (points[i].X - c.X) * sin + (points[i].Y - c.Y) * cos + c.Y
+      ));
+    }
+    return newpoints;
+  }
+  function ScaleTo(points, size) {
+    var B = BoundingBox(points);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(
+        points[i].X * (size / B.Width),
+        points[i].Y * (size / B.Height)
+      ));
+    }
+    return newpoints;
+  }
+  function TranslateTo(points, pt) {
+    var c = Centroid(points);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(points[i].X + pt.X - c.X, points[i].Y + pt.Y - c.Y));
+    }
+    return newpoints;
+  }
+  function Vectorize(points) {
+    var sum = 0.0, vector = [];
+    for (var i = 0; i < points.length; i++) {
+      vector.push(points[i].X, points[i].Y);
+      sum += points[i].X * points[i].X + points[i].Y * points[i].Y;
+    }
+    var magnitude = Math.sqrt(sum);
+    for (var i = 0; i < vector.length; i++) vector[i] /= magnitude;
+    return vector;
+  }
+  function DistanceAtBestAngle(points, T, a, b, threshold) {
+    var x1 = Phi * a + (1.0 - Phi) * b, f1 = DistanceAtAngle(points, T, x1);
+    var x2 = (1.0 - Phi) * a + Phi * b, f2 = DistanceAtAngle(points, T, x2);
+    while (Math.abs(b - a) > threshold) {
+      if (f1 < f2) {
+        b = x2; x2 = x1; f2 = f1;
+        x1 = Phi * a + (1.0 - Phi) * b; f1 = DistanceAtAngle(points, T, x1);
+      } else {
+        a = x1; x1 = x2; f1 = f2;
+        x2 = (1.0 - Phi) * a + Phi * b; f2 = DistanceAtAngle(points, T, x2);
+      }
+    }
+    return Math.min(f1, f2);
+  }
+  function DistanceAtAngle(points, T, radians) {
+    return PathDistance(RotateBy(points, radians), T.Points);
+  }
+  function Centroid(points) {
+    var x = 0, y = 0;
+    for (var i = 0; i < points.length; i++) { x += points[i].X; y += points[i].Y; }
+    return new Point(x / points.length, y / points.length);
+  }
+  function BoundingBox(points) {
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < points.length; i++) {
+      minX = Math.min(minX, points[i].X); maxX = Math.max(maxX, points[i].X);
+      minY = Math.min(minY, points[i].Y); maxY = Math.max(maxY, points[i].Y);
+    }
+    return new Rectangle(minX, minY, maxX - minX, maxY - minY);
+  }
+  function PathDistance(pts1, pts2) {
+    var d = 0;
+    for (var i = 0; i < pts1.length; i++) d += Distance(pts1[i], pts2[i]);
+    return d / pts1.length;
+  }
+  function PathLength(points) {
+    var d = 0;
+    for (var i = 1; i < points.length; i++) d += Distance(points[i - 1], points[i]);
+    return d;
+  }
+  function Distance(p1, p2) {
+    var dx = p2.X - p1.X, dy = p2.Y - p1.Y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // Default templates: circle, checkmark, x, z, arrow (5 only)
+  var defaultTemplates = [
+    { name: 'circle', points: [new Point(127,141),new Point(124,140),new Point(120,139),new Point(118,139),new Point(116,139),new Point(111,140),new Point(109,141),new Point(104,144),new Point(100,147),new Point(96,152),new Point(93,157),new Point(90,163),new Point(87,169),new Point(85,175),new Point(83,181),new Point(82,190),new Point(82,195),new Point(83,200),new Point(84,205),new Point(88,213),new Point(91,216),new Point(96,219),new Point(103,222),new Point(108,224),new Point(111,224),new Point(120,224),new Point(133,223),new Point(142,222),new Point(152,218),new Point(160,214),new Point(167,210),new Point(173,204),new Point(178,198),new Point(179,196),new Point(182,188),new Point(182,177),new Point(178,167),new Point(170,150),new Point(163,138),new Point(152,130),new Point(143,129),new Point(140,131),new Point(129,136),new Point(126,139)] },
+    { name: 'checkmark', points: [new Point(91,185),new Point(93,185),new Point(95,185),new Point(97,185),new Point(100,188),new Point(102,189),new Point(104,190),new Point(106,193),new Point(108,195),new Point(110,198),new Point(112,201),new Point(114,204),new Point(115,207),new Point(117,210),new Point(118,212),new Point(120,214),new Point(121,217),new Point(122,219),new Point(123,222),new Point(124,224),new Point(126,226),new Point(127,229),new Point(129,231),new Point(130,233),new Point(129,231),new Point(129,228),new Point(129,226),new Point(129,224),new Point(129,221),new Point(129,218),new Point(129,212),new Point(129,208),new Point(130,198),new Point(132,189),new Point(134,182),new Point(137,173),new Point(143,164),new Point(147,157),new Point(151,151),new Point(155,144),new Point(161,137),new Point(165,131),new Point(171,122),new Point(174,118),new Point(176,114),new Point(177,112),new Point(177,114),new Point(175,116),new Point(173,118)] },
+    { name: 'x', points: [new Point(87,142),new Point(89,145),new Point(91,148),new Point(93,151),new Point(96,155),new Point(98,157),new Point(100,160),new Point(102,162),new Point(106,167),new Point(108,169),new Point(110,171),new Point(115,177),new Point(119,183),new Point(123,189),new Point(127,193),new Point(129,196),new Point(133,200),new Point(137,206),new Point(140,209),new Point(143,212),new Point(146,215),new Point(151,220),new Point(153,222),new Point(155,223),new Point(157,225),new Point(158,223),new Point(157,218),new Point(155,211),new Point(154,208),new Point(152,200),new Point(150,189),new Point(148,179),new Point(147,170),new Point(147,158),new Point(147,148),new Point(147,141),new Point(147,136),new Point(144,135),new Point(142,137),new Point(140,139),new Point(135,145),new Point(131,152),new Point(124,163),new Point(116,177),new Point(108,191),new Point(100,206),new Point(94,217),new Point(91,222),new Point(89,225),new Point(87,226),new Point(87,224)] },
+    { name: 'z', points: (function() {
+        var pts = [];
+        for (var i = 0; i <= 15; i++) pts.push(new Point(30 + (220 - 30) * i / 15, 30));
+        for (var i = 1; i <= 15; i++) pts.push(new Point(220 - (220 - 30) * i / 15, 30 + (220 - 30) * i / 15));
+        for (var i = 1; i <= 15; i++) pts.push(new Point(30 + (220 - 30) * i / 15, 220));
+        return pts;
+      })() },
+    { name: 'arrow', points: [new Point(68,222),new Point(70,220),new Point(73,218),new Point(75,217),new Point(77,215),new Point(80,213),new Point(82,212),new Point(84,210),new Point(87,209),new Point(89,208),new Point(92,206),new Point(95,204),new Point(101,201),new Point(106,198),new Point(112,194),new Point(118,191),new Point(124,187),new Point(127,186),new Point(132,183),new Point(138,181),new Point(141,180),new Point(146,178),new Point(154,173),new Point(159,171),new Point(161,170),new Point(166,167),new Point(168,167),new Point(171,166),new Point(174,164),new Point(177,162),new Point(180,160),new Point(182,158),new Point(183,156),new Point(181,154),new Point(178,153),new Point(171,153),new Point(164,153),new Point(160,153),new Point(150,154),new Point(147,155),new Point(141,157),new Point(137,158),new Point(135,158),new Point(137,158),new Point(140,157),new Point(143,156),new Point(151,154),new Point(160,152),new Point(170,149),new Point(179,147),new Point(185,145),new Point(192,144),new Point(196,144),new Point(198,144),new Point(200,144),new Point(201,147),new Point(199,149),new Point(194,157),new Point(191,160),new Point(186,167),new Point(180,176),new Point(177,179),new Point(171,187),new Point(169,189),new Point(165,194),new Point(164,196)] }
+  ];
+
+  var DEFAULT_ACTIONS = {
+    circle: 'UNDO',
+    checkmark: 'SAVE',
+    x: 'DELETE',
+    z: 'UNDO (Z)',
+    arrow: 'NEXT'
+  };
+
+  function DollarRecognizer() {
+    this.Unistrokes = [];
+    for (var i = 0; i < defaultTemplates.length; i++) {
+      var t = defaultTemplates[i];
+      this.Unistrokes.push(new Unistroke(t.name, t.points));
+    }
+  }
+  DollarRecognizer.prototype.Recognize = function(points) {
+    if (points.length < 10) return new Result('', 0);
+    points = Resample(points.slice(), NumPoints);
+    var radians = IndicativeAngle(points);
+    points = RotateBy(points, -radians);
+    points = ScaleTo(points, SquareSize);
+    points = TranslateTo(points, Origin);
+    var b = Infinity, u = -1;
+    for (var i = 0; i < this.Unistrokes.length; i++) {
+      var d = DistanceAtBestAngle(points, this.Unistrokes[i], -AngleRange, AngleRange, AnglePrecision);
+      if (d < b) { b = d; u = i; }
+    }
+    return u === -1 ? new Result('', 0) : new Result(this.Unistrokes[u].Name, 1.0 - b / HalfDiagonal);
+  };
+  DollarRecognizer.prototype.AddGesture = function(name, points) {
+    this.Unistrokes.push(new Unistroke(name, points));
+  };
+  DollarRecognizer.prototype.RemoveGestureByName = function(name, onRemoveRaw) {
+    var defNames = defaultTemplates.map(function(t) { return t.name; });
+    if (defNames.indexOf(name) !== -1) return;
+    for (var i = this.Unistrokes.length - 1; i >= 0; i--) {
+      if (this.Unistrokes[i].Name === name) {
+        this.Unistrokes.splice(i, 1);
+        if (onRemoveRaw) onRemoveRaw(name);
+        return;
+      }
+    }
+  };
+  DollarRecognizer.prototype.GetGestureNames = function() {
+    var names = [];
+    for (var i = 0; i < this.Unistrokes.length; i++) names.push(this.Unistrokes[i].Name);
+    return names;
+  };
+
+  var STORAGE_KEY = 'gestureShortcutsSaved';
+  var customGestureRaw = {}; // name -> array of {x,y} (raw) for persistence
+  function loadSavedGestures(recognizer) {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var arr = JSON.parse(raw);
+      for (var i = 0; i < arr.length; i++) {
+        var o = arr[i];
+        var rawPts = (o.points || []).map(function(p) { return { x: p.X != null ? p.X : p.x, y: p.Y != null ? p.Y : p.y }; });
+        if (rawPts.length >= 10) {
+          var pts = rawPts.map(function(p) { return new Point(p.x, p.y); });
+          recognizer.AddGesture(o.name, pts);
+          customGestureRaw[o.name] = rawPts;
+        }
+      }
+    } catch (e) {}
+  }
+  function saveCustomGestureRaw(name, points) {
+    customGestureRaw[name] = points.map(function(p) { return { x: p.x, y: p.y }; });
+  }
+  function removeCustomGestureRaw(name) {
+    delete customGestureRaw[name];
+  }
+  function saveGestures(recognizer) {
+    var out = [];
+    for (var name in customGestureRaw) {
+      if (!customGestureRaw.hasOwnProperty(name)) continue;
+      var pts = customGestureRaw[name];
+      out.push({ name: name, points: pts.map(function(p) { return { X: p.x, Y: p.y }; }) });
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+  }
+
+  // ——— App state ———
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var recognizer = new DollarRecognizer();
+  loadSavedGestures(recognizer);
+
+  var strokePoints = [];
+  var isDrawing = false;
+  var recordMode = false;
+  var recordName = '';
+  var clearTimeoutId = null;
+  var lastPointerType = '—';
+  var lastPointCount = 0;
+  var lastResultName = '—';
+  var lastResultScore = '—';
+  var lastRecognitionTime = '—';
+
+  function getActionForGesture(name) {
+    if (DEFAULT_ACTIONS[name]) return DEFAULT_ACTIONS[name];
+    return (name || '').toUpperCase();
+  }
+
+  function resizeCanvas() {
+    var w = window.innerWidth, h = window.innerHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      ctx.fillStyle = '#F9F9F9';
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+  function clearCanvas() {
+    resizeCanvas();
+    ctx.fillStyle = '#F9F9F9';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawTrailSmooth(points) {
+    if (points.length < 2) return;
+    ctx.strokeStyle = '#2E75B6';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (var i = 1; i < points.length; i++) {
+      var p0 = points[i - 1];
+      var p1 = points[i];
+      var mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+      ctx.quadraticCurveTo(p0.x, p0.y, mid.x, mid.y);
+    }
+    ctx.quadraticCurveTo(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].x, points[points.length - 1].y);
+    ctx.stroke();
+  }
+
+  function showFeedback(text, color, withQuestion) {
+    var el = document.getElementById('feedback-label');
+    el.textContent = text + (withQuestion ? ' ?' : '');
+    el.style.color = color;
+    el.classList.remove('fade-out');
+    el.classList.add('visible');
+    if (navigator.vibrate) navigator.vibrate(80);
+    setTimeout(function() {
+      el.classList.add('fade-out');
+      setTimeout(function() { el.classList.remove('visible', 'fade-out'); }, 500);
+    }, 300);
+  }
+  function showNoMatchFlash() {
+    canvas.classList.add('no-match-flash');
+    setTimeout(function() { canvas.classList.remove('no-match-flash'); }, 400);
+  }
+
+  function updateDebug() {
+    document.getElementById('debug-pointer').textContent = lastPointerType;
+    document.getElementById('debug-points').textContent = lastPointCount;
+    document.getElementById('debug-result').textContent = lastResultName;
+    document.getElementById('debug-score').textContent = lastResultScore;
+    document.getElementById('debug-time').textContent = lastRecognitionTime;
+  }
+
+  function onPointerDown(e) {
+    lastPointerType = e.pointerType || '—';
+    updateDebug();
+    if (e.pointerType !== 'pen') return;
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var y = e.clientY - rect.top;
+    strokePoints = [{ x: x, y: y }];
+    isDrawing = true;
+    if (clearTimeoutId) { clearTimeout(clearTimeoutId); clearTimeoutId = null; }
+    ctx.fillStyle = '#F9F9F9';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  function onPointerMove(e) {
+    if (e.pointerType !== 'pen' || !isDrawing) return;
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    strokePoints.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    clearCanvas();
+    drawTrailSmooth(strokePoints);
+  }
+  function onPointerUp(e) {
+    if (e.pointerType !== 'pen') return;
+    e.preventDefault();
+    if (!isDrawing) return;
+    isDrawing = false;
+    lastPointCount = strokePoints.length;
+    updateDebug();
+
+    var pointsForRecognizer = strokePoints.map(function(p) { return new Point(p.x, p.y); });
+
+    if (recordMode && recordName.trim()) {
+      var nameToSave = recordName.trim();
+      recognizer.AddGesture(nameToSave, pointsForRecognizer);
+      saveCustomGestureRaw(nameToSave, pointsForRecognizer);
+      saveGestures(recognizer);
+      recordMode = false;
+      recordName = '';
+      document.getElementById('canvas').classList.remove('record-mode');
+      document.getElementById('record-label').classList.remove('visible');
+      document.getElementById('record-panel').classList.remove('visible');
+      document.getElementById('record-overlay').classList.remove('visible');
+      showFeedback('Saved: ' + nameToSave, '#1B4F8A', false);
+      clearTimeoutId = setTimeout(clearCanvas, 800);
+      return;
+    }
+
+    if (strokePoints.length < 10) {
+      clearTimeoutId = setTimeout(clearCanvas, 800);
+      return;
+    }
+
+    var t0 = performance.now();
+    var result = recognizer.Recognize(pointsForRecognizer);
+    var t1 = performance.now();
+    lastResultName = result.Name || '—';
+    lastResultScore = (result.Score != null ? result.Score.toFixed(3) : '—');
+    lastRecognitionTime = Math.round(t1 - t0);
+    updateDebug();
+
+    var score = result.Score;
+    var name = result.Name;
+
+    if (score > 0.75) {
+      showFeedback(getActionForGesture(name), '#1B4F8A', false);
+    } else if (score >= 0.5 && score <= 0.75) {
+      showFeedback(getActionForGesture(name), '#B85C00', true);
+    } else {
+      showNoMatchFlash();
+    }
+
+    clearTimeoutId = setTimeout(clearCanvas, 800);
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+  canvas.addEventListener('pointermove', onPointerMove, { passive: false });
+  canvas.addEventListener('pointerup', onPointerUp, { passive: false });
+  canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+  document.getElementById('btn-record').addEventListener('click', function() {
+    recordMode = true;
+    recordName = '';
+    document.getElementById('record-name').value = '';
+    document.getElementById('canvas').classList.add('record-mode');
+    document.getElementById('record-label').classList.add('visible');
+    document.getElementById('record-panel').classList.add('visible');
+    document.getElementById('record-overlay').classList.add('visible');
+  });
+  document.getElementById('record-overlay').addEventListener('click', function() {
+    recordMode = false;
+    document.getElementById('canvas').classList.remove('record-mode');
+    document.getElementById('record-label').classList.remove('visible');
+    document.getElementById('record-panel').classList.remove('visible');
+    document.getElementById('record-overlay').classList.remove('visible');
+  });
+  document.getElementById('record-confirm').addEventListener('click', function() {
+    recordName = document.getElementById('record-name').value.trim();
+    if (!recordName) return;
+    document.getElementById('record-panel').classList.remove('visible');
+    document.getElementById('record-overlay').classList.remove('visible');
+  });
+
+  document.getElementById('btn-gestures').addEventListener('click', function() {
+    var list = document.getElementById('gesture-list');
+    list.innerHTML = '';
+    var defNames = defaultTemplates.map(function(t) { return t.name; });
+    recognizer.GetGestureNames().forEach(function(name) {
+      var li = document.createElement('li');
+      var isBuiltin = defNames.indexOf(name) !== -1;
+      li.innerHTML = '<span class="name">' + name + '</span><span class="action">' + getActionForGesture(name) + '</span>' +
+        (isBuiltin ? '' : '<button type="button" class="delete-btn" data-name="' + name + '">Delete</button>');
+      list.appendChild(li);
+      var btn = li.querySelector('.delete-btn');
+      if (btn) {
+        btn.addEventListener('click', function() {
+          recognizer.RemoveGestureByName(name, removeCustomGestureRaw);
+          saveGestures(recognizer);
+          li.remove();
+        });
+      }
+    });
+    document.getElementById('library-panel').classList.add('visible');
+    document.getElementById('library-overlay').classList.add('visible');
+  });
+  document.getElementById('library-overlay').addEventListener('click', function() {
+    document.getElementById('library-panel').classList.remove('visible');
+    document.getElementById('library-overlay').classList.remove('visible');
+  });
+
+  document.getElementById('debug-toggle').addEventListener('click', function() {
+    document.getElementById('debug-panel').classList.toggle('visible');
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+  clearCanvas();
+})();
+  </script>
+</body>
+</html>
