@@ -88,8 +88,8 @@
       font-size: 0.95rem;
       font-weight: 600;
       color: #fff;
-      background: #2E75B6;
-      box-shadow: 0 4px 12px rgba(46, 117, 182, 0.35);
+      background: #007AFF;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
       touch-action: manipulation;
       cursor: pointer;
       z-index: 20;
@@ -182,7 +182,7 @@
       font-size: 1rem;
       font-weight: 600;
       color: #fff;
-      background: #2E75B6;
+      background: #007AFF;
       border: none;
       border-radius: 10px;
       touch-action: manipulation;
@@ -204,7 +204,7 @@
     }
     .gesture-list li:last-child { border-bottom: none; }
     .gesture-list .name { font-weight: 600; color: #1A1A2E; }
-    .gesture-list .action { color: #2E75B6; font-size: 0.9rem; margin-left: 8px; }
+    .gesture-list .action { color: #007AFF; font-size: 0.9rem; margin-left: 8px; }
     .gesture-list .delete-btn {
       padding: 8px 14px;
       font-size: 0.85rem;
@@ -523,21 +523,47 @@
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  function drawTrailSmooth(points) {
+  // Draw stroke: translucent while drawing; when recognized (opaque) — solid, thicker, richer colour
+  function drawTrailSmooth(points, opaque) {
     if (points.length < 2) return;
-    ctx.strokeStyle = '#2E75B6';
-    ctx.lineWidth = 2;
+    var alpha, lineWidth, r0, g0, b0, r1, g1, b1;
+    if (opaque) {
+      alpha = 1;
+      lineWidth = 4;
+      r0 = 0; g0 = 82; b0 = 204;  // Deeper blue at start
+      r1 = 0; g1 = 122; b1 = 255; // Apple blue at tip
+    } else {
+      alpha = 0.52;
+      lineWidth = 1.8;
+      r0 = 232; g0 = 242; b0 = 255;
+      r1 = 0; g1 = 122; b1 = 255;
+    }
+    ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (var i = 1; i < points.length; i++) {
-      var p0 = points[i - 1];
-      var p1 = points[i];
-      var mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
-      ctx.quadraticCurveTo(p0.x, p0.y, mid.x, mid.y);
+    var n = points.length;
+    var startX = points[0].x, startY = points[0].y;
+    for (var i = 0; i < n - 1; i++) {
+      var t = (i + 0.5) / (n - 1);
+      t = t * t;
+      var r = Math.round(r0 + (r1 - r0) * t);
+      var g = Math.round(g0 + (g1 - g0) * t);
+      var b = Math.round(b0 + (b1 - b0) * t);
+      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      var p0 = points[i];
+      var p1 = points[i + 1];
+      var midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
+      ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
+      ctx.stroke();
+      startX = midX;
+      startY = midY;
     }
-    ctx.quadraticCurveTo(points[points.length - 1].x, points[points.length - 1].y, points[points.length - 1].x, points[points.length - 1].y);
+    ctx.strokeStyle = 'rgba(' + r1 + ',' + g1 + ',' + b1 + ',' + alpha + ')';
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.quadraticCurveTo(points[n - 1].x, points[n - 1].y, points[n - 1].x, points[n - 1].y);
     ctx.stroke();
   }
 
@@ -569,7 +595,7 @@
   function onPointerDown(e) {
     lastPointerType = e.pointerType || '—';
     updateDebug();
-    if (e.pointerType !== 'pen') return;
+    if (e.pointerType !== 'pen' && !(e.pointerType === 'mouse' && e.button === 0)) return;
     e.preventDefault();
     var rect = canvas.getBoundingClientRect();
     var x = e.clientX - rect.left;
@@ -581,15 +607,15 @@
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   function onPointerMove(e) {
-    if (e.pointerType !== 'pen' || !isDrawing) return;
+    if ((e.pointerType !== 'pen' && e.pointerType !== 'mouse') || !isDrawing) return;
     e.preventDefault();
     var rect = canvas.getBoundingClientRect();
     strokePoints.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     clearCanvas();
-    drawTrailSmooth(strokePoints);
+    drawTrailSmooth(strokePoints, false);
   }
   function onPointerUp(e) {
-    if (e.pointerType !== 'pen') return;
+    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
     e.preventDefault();
     if (!isDrawing) return;
     isDrawing = false;
@@ -609,7 +635,7 @@
       document.getElementById('record-label').classList.remove('visible');
       document.getElementById('record-panel').classList.remove('visible');
       document.getElementById('record-overlay').classList.remove('visible');
-      showFeedback('Saved: ' + nameToSave, '#1B4F8A', false);
+      showFeedback('Saved: ' + nameToSave, '#007AFF', false);
       clearTimeoutId = setTimeout(clearCanvas, 800);
       return;
     }
@@ -631,7 +657,9 @@
     var name = result.Name;
 
     if (score > 0.75) {
-      showFeedback(getActionForGesture(name), '#1B4F8A', false);
+      clearCanvas();
+      drawTrailSmooth(strokePoints, true);
+      showFeedback(getActionForGesture(name), '#007AFF', false);
     } else if (score >= 0.5 && score <= 0.75) {
       showFeedback(getActionForGesture(name), '#B85C00', true);
     } else {
