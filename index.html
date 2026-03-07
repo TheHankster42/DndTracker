@@ -16,9 +16,11 @@
       -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
-      background: #F9F9F9;
-      color: #1A1A2E;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ECECEC;
+      color: #1D1D1F;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-smoothing: antialiased;
     }
     #canvas-wrap {
       position: fixed;
@@ -31,14 +33,14 @@
       height: 100%;
       touch-action: none;
       border: 3px solid transparent;
-      transition: border-color 0.2s ease;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
     }
     #canvas.record-mode {
-      border-color: #E67E22;
-      box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.3);
+      border-color: #FF9F0A;
+      box-shadow: 0 0 0 1px rgba(255, 159, 10, 0.4), 0 0 20px rgba(255, 159, 10, 0.15);
     }
     #canvas.no-match-flash {
-      border-color: #C0392B;
+      border-color: #FF3B30;
       animation: borderFlash 0.4s ease-out;
     }
     @keyframes borderFlash {
@@ -50,12 +52,14 @@
       left: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      color: #B85C00;
-      font-size: 1.1rem;
+      color: #C93400;
+      font-size: 1.125rem;
       font-weight: 600;
+      letter-spacing: -0.01em;
       opacity: 0;
-      transition: opacity 0.2s;
+      transition: opacity 0.25s ease;
       z-index: 2;
+      text-shadow: 0 1px 2px rgba(255,255,255,0.8);
     }
     .record-label.visible {
       opacity: 1;
@@ -66,11 +70,12 @@
       left: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      font-size: 2.5rem;
-      font-weight: 700;
+      font-size: 2.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
       z-index: 10;
       opacity: 0;
-      transition: opacity 0.3s ease;
+      transition: opacity 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
     #feedback-label.visible {
       opacity: 1;
@@ -81,21 +86,28 @@
     }
     .btn-float {
       position: fixed;
-      bottom: 24px;
-      padding: 12px 20px;
+      bottom: 28px;
+      padding: 11px 22px;
       border: none;
-      border-radius: 12px;
-      font-size: 0.95rem;
-      font-weight: 600;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
       color: #fff;
       background: #007AFF;
-      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
       touch-action: manipulation;
       cursor: pointer;
       z-index: 20;
+      transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .btn-float:hover {
+      background: #0051D5;
+      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.35), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
     }
     .btn-float:active {
       transform: scale(0.98);
+      background: #004EC4;
     }
     #btn-record {
       left: 24px;
@@ -118,13 +130,15 @@
       left: 12px;
       right: 12px;
       max-width: 320px;
-      background: rgba(26, 26, 46, 0.95);
-      color: #F9F9F9;
-      padding: 12px;
-      border-radius: 12px;
-      font-size: 0.8rem;
-      font-family: monospace;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      background: rgba(30, 30, 30, 0.88);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      color: rgba(255, 255, 255, 0.9);
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 0.8125rem;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
       z-index: 25;
       display: none;
       touch-action: manipulation;
@@ -132,14 +146,17 @@
     #debug-panel.visible {
       display: block;
     }
-    #debug-panel p { margin: 4px 0; }
+    #debug-panel p { margin: 6px 0; }
     .panel-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       z-index: 40;
       display: none;
       touch-action: manipulation;
+      transition: opacity 0.3s ease;
     }
     .panel-overlay.visible {
       display: block;
@@ -150,43 +167,67 @@
       right: 0;
       bottom: 0;
       max-height: 70vh;
-      background: #F9F9F9;
-      border-radius: 20px 20px 0 0;
-      box-shadow: 0 -8px 32px rgba(0,0,0,0.15);
-      padding: 24px;
+      background: rgba(246, 246, 246, 0.95);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06) inset;
+      padding: 28px 24px  calc(28px + env(safe-area-inset-bottom));
       z-index: 50;
       touch-action: manipulation;
       transform: translateY(100%);
-      transition: transform 0.3s ease;
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
     }
     .panel.visible {
       transform: translateY(0);
     }
     .panel h3 {
-      margin: 0 0 16px 0;
-      font-size: 1.2rem;
-      color: #1A1A2E;
+      margin: 0 0 20px 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #1D1D1F;
     }
     .panel input[type="text"] {
       width: 100%;
-      padding: 12px 16px;
+      padding: 11px 14px;
       font-size: 1rem;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      margin-bottom: 12px;
+      border: 1px solid #D1D1D6;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      background: rgba(255, 255, 255, 0.8);
+      color: #1D1D1F;
       touch-action: manipulation;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .panel input[type="text"]::placeholder {
+      color: #8E8E93;
+    }
+    .panel input[type="text"]:focus {
+      outline: none;
+      border-color: #007AFF;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25);
     }
     .panel button.primary {
       width: 100%;
-      padding: 14px;
+      padding: 12px 16px;
       font-size: 1rem;
-      font-weight: 600;
+      font-weight: 500;
+      letter-spacing: -0.01em;
       color: #fff;
       background: #007AFF;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
       touch-action: manipulation;
       cursor: pointer;
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .panel button.primary:hover {
+      background: #0051D5;
+    }
+    .panel button.primary:active {
+      transform: scale(0.99);
     }
     .gesture-list {
       list-style: none;
@@ -194,26 +235,39 @@
       padding: 0;
       max-height: 50vh;
       overflow-y: auto;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(0, 0, 0, 0.06);
     }
     .gesture-list li {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 0;
-      border-bottom: 1px solid #eee;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      transition: background 0.15s ease;
     }
     .gesture-list li:last-child { border-bottom: none; }
-    .gesture-list .name { font-weight: 600; color: #1A1A2E; }
-    .gesture-list .action { color: #007AFF; font-size: 0.9rem; margin-left: 8px; }
+    .gesture-list li:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    .gesture-list .name { font-weight: 600; color: #1D1D1F; }
+    .gesture-list .action { color: #007AFF; font-size: 0.875rem; margin-left: 8px; font-weight: 500; }
     .gesture-list .delete-btn {
-      padding: 8px 14px;
-      font-size: 0.85rem;
-      color: #C0392B;
+      padding: 6px 12px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #FF3B30;
       background: transparent;
-      border: 1px solid #C0392B;
-      border-radius: 8px;
+      border: 1px solid rgba(255, 59, 48, 0.5);
+      border-radius: 6px;
       touch-action: manipulation;
       cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .gesture-list .delete-btn:hover {
+      background: rgba(255, 59, 48, 0.1);
+      border-color: #FF3B30;
     }
     .gesture-list .delete-btn.builtin { display: none; }
   </style>
@@ -513,58 +567,127 @@
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
-      ctx.fillStyle = '#F9F9F9';
+      ctx.fillStyle = '#ECECEC';
       ctx.fillRect(0, 0, w, h);
     }
   }
   function clearCanvas() {
     resizeCanvas();
-    ctx.fillStyle = '#F9F9F9';
+    ctx.fillStyle = '#ECECEC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Draw stroke: translucent while drawing; when recognized (opaque) — solid, thicker, richer colour
+  // Ramer-Douglas-Peucker: simplify path by removing points that don't deviate much (reduces wobble)
+  function perpendicularDistance(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1e-9;
+    return Math.abs((p.y - a.y) * dx - (p.x - a.x) * dy) / len;
+  }
+  function simplifyPath(points, tolerance) {
+    if (points.length <= 2) return points;
+    var first = points[0], last = points[points.length - 1];
+    var maxDist = 0, maxIdx = 0;
+    for (var i = 1; i < points.length - 1; i++) {
+      var d = perpendicularDistance(points[i], first, last);
+      if (d > maxDist) { maxDist = d; maxIdx = i; }
+    }
+    if (maxDist < tolerance) return [first, last];
+    var left = simplifyPath(points.slice(0, maxIdx + 1), tolerance);
+    var right = simplifyPath(points.slice(maxIdx), tolerance);
+    return left.slice(0, -1).concat(right);
+  }
+
+  // Catmull-Rom: one cubic Bezier segment from P1 to P2 using P0, P3 for tangents
+  function catmullRomToBezier(p0, p1, p2, p3) {
+    var cp1x = p1.x + (p2.x - p0.x) / 6;
+    var cp1y = p1.y + (p2.y - p0.y) / 6;
+    var cp2x = p2.x - (p3.x - p1.x) / 6;
+    var cp2y = p2.y - (p3.y - p1.y) / 6;
+    return { cp1: { x: cp1x, y: cp1y }, cp2: { x: cp2x, y: cp2y } };
+  }
+
+  // Draw simplified stroke: straight parts stay straight, curved parts drawn as smooth splines
+  function drawTrailCrisp(points) {
+    var pts = simplifyPath(points, 2.5);
+    if (pts.length < 2) return;
+    ctx.shadowColor = 'rgba(0, 122, 255, 0.35)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 2;
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 122, 255, 1)';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 2) {
+      ctx.lineTo(pts[1].x, pts[1].y);
+    } else {
+      for (var i = 0; i < pts.length - 1; i++) {
+        var p0 = pts[Math.max(0, i - 1)];
+        var p1 = pts[i];
+        var p2 = pts[i + 1];
+        var p3 = pts[Math.min(pts.length - 1, i + 2)];
+        var cr = catmullRomToBezier(p0, p1, p2, p3);
+        ctx.bezierCurveTo(cr.cp1.x, cr.cp1.y, cr.cp2.x, cr.cp2.y, p2.x, p2.y);
+      }
+    }
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+  }
+
+  // Draw stroke: macOS-style — one path, gradient along stroke for continuous ombre (no overlap darkening)
   function drawTrailSmooth(points, opaque) {
     if (points.length < 2) return;
     var alpha, lineWidth, r0, g0, b0, r1, g1, b1;
     if (opaque) {
       alpha = 1;
-      lineWidth = 4;
-      r0 = 0; g0 = 82; b0 = 204;  // Deeper blue at start
-      r1 = 0; g1 = 122; b1 = 255; // Apple blue at tip
-    } else {
-      alpha = 0.52;
-      lineWidth = 1.8;
-      r0 = 232; g0 = 242; b0 = 255;
+      lineWidth = 16;
+      r0 = 0; g0 = 122; b0 = 255;
       r1 = 0; g1 = 122; b1 = 255;
+      ctx.shadowColor = 'rgba(0, 122, 255, 0.35)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 2;
+    } else {
+      alpha = 0.58;
+      lineWidth = 7.2;
+      r0 = 174; g0 = 199; b0 = 242;
+      r1 = 0; g1 = 122; b1 = 255;
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
     }
     ctx.lineWidth = lineWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     var n = points.length;
-    var startX = points[0].x, startY = points[0].y;
+    var x0 = points[0].x, y0 = points[0].y;
+    var x1 = points[n - 1].x, y1 = points[n - 1].y;
+    if (opaque) {
+      ctx.strokeStyle = 'rgba(0, 122, 255, 1)';
+    } else {
+      var grad = ctx.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0, 'rgba(' + r0 + ',' + g0 + ',' + b0 + ',' + alpha + ')');
+      grad.addColorStop(1, 'rgba(' + r1 + ',' + g1 + ',' + b1 + ',' + alpha + ')');
+      ctx.strokeStyle = grad;
+    }
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    var startX = x0, startY = y0;
     for (var i = 0; i < n - 1; i++) {
-      var t = (i + 0.5) / (n - 1);
-      t = t * t;
-      var r = Math.round(r0 + (r1 - r0) * t);
-      var g = Math.round(g0 + (g1 - g0) * t);
-      var b = Math.round(b0 + (b1 - b0) * t);
-      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
       var p0 = points[i];
       var p1 = points[i + 1];
       var midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
       ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
-      ctx.stroke();
       startX = midX;
       startY = midY;
     }
-    ctx.strokeStyle = 'rgba(' + r1 + ',' + g1 + ',' + b1 + ',' + alpha + ')';
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
     ctx.quadraticCurveTo(points[n - 1].x, points[n - 1].y, points[n - 1].x, points[n - 1].y);
     ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
   }
 
   function showFeedback(text, color, withQuestion) {
@@ -603,7 +726,7 @@
     strokePoints = [{ x: x, y: y }];
     isDrawing = true;
     if (clearTimeoutId) { clearTimeout(clearTimeoutId); clearTimeoutId = null; }
-    ctx.fillStyle = '#F9F9F9';
+    ctx.fillStyle = '#ECECEC';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   function onPointerMove(e) {
@@ -658,7 +781,7 @@
 
     if (score > 0.75) {
       clearCanvas();
-      drawTrailSmooth(strokePoints, true);
+      drawTrailCrisp(strokePoints);
       showFeedback(getActionForGesture(name), '#007AFF', false);
     } else if (score >= 0.5 && score <= 0.75) {
       showFeedback(getActionForGesture(name), '#B85C00', true);
