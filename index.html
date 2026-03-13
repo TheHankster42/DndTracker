@@ -272,13 +272,19 @@
     .hp-editor {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
+    }
+    .hp-editor .hp-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .hp-editor .hp-slider {
-      width: 100%;
+      flex: 1;
+      min-width: 0;
       -webkit-appearance: none;
       appearance: none;
-      height: 0;
+      height: 24px;
       border-radius: 999px;
       background: transparent;
       outline: none;
@@ -288,26 +294,28 @@
     .hp-editor .hp-main {
       background: transparent;
     }
-    .hp-editor .hp-temp {
-      background: transparent;
-    }
+    /* Thumb: short vertical line that hangs over the bar */
     .hp-editor .hp-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
       width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #007AFF;
-      cursor: pointer;
-      border: none;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+      height: 22px;
+      border-radius: 2px;
+      background: #1D1D1F;
+      cursor: grab;
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      margin-top: -6px; /* center 22px thumb over 10px track */
     }
-    .hp-editor .hp-temp::-webkit-slider-thumb {
-      background: #FF9F0A;
+    .hp-editor .hp-slider::-webkit-slider-thumb:active {
+      cursor: grabbing;
+    }
+    .hp-editor .hp-slider::-webkit-slider-runnable-track {
+      height: 10px;
     }
     /* HP bar: colour shifts from green (healthy) to red (low) over grey track */
     .hp-editor .hp-main::-webkit-slider-runnable-track {
-      height: 3px;
+      height: 10px;
       border-radius: 999px;
       background: linear-gradient(
         to right,
@@ -318,7 +326,7 @@
       );
     }
     .hp-editor .hp-main::-moz-range-track {
-      height: 3px;
+      height: 10px;
       border-radius: 999px;
       background: linear-gradient(
         to right,
@@ -328,54 +336,75 @@
         #E5E5EA 100%
       );
     }
-    /* Temp HP bar: orange fill over transparent */
-    .hp-editor .hp-temp::-webkit-slider-runnable-track {
-      height: 3px;
-      border-radius: 999px;
-      background: linear-gradient(to right, #FF9F0A 0%, #FF9F0A var(--temp-fill, 0%), transparent var(--temp-fill, 0%), transparent 100%);
-    }
-    .hp-editor .hp-temp::-moz-range-track {
-      height: 3px;
-      border-radius: 999px;
-      background: linear-gradient(to right, #FF9F0A 0%, #FF9F0A var(--temp-fill, 0%), transparent var(--temp-fill, 0%), transparent 100%);
-    }
     .hp-editor .hp-slider::-moz-range-thumb {
       width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #007AFF;
-      cursor: pointer;
-      border: none;
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+      height: 22px;
+      border-radius: 2px;
+      background: #1D1D1F;
+      cursor: grab;
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
-    .hp-editor .hp-temp::-moz-range-thumb {
-      background: #FF9F0A;
+    /* Current HP number input (next to slider for precise adjustment) */
+    .hp-editor .hp-current-input {
+      width: 44px;
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #D1D1D6;
+      text-align: center;
+      background: #fff;
     }
-    /* Make HP sliders easier to grab on touch devices (iPad, etc.) */
-    @media (pointer: coarse) {
-      .hp-editor .hp-slider {
-        height: 8px;
-      }
-      .hp-editor .hp-main::-webkit-slider-runnable-track,
-      .hp-editor .hp-main::-moz-range-track {
-        height: 6px;
-      }
-      .hp-editor .hp-temp::-webkit-slider-runnable-track,
-      .hp-editor .hp-temp::-moz-range-track {
-        height: 6px;
-      }
-      .hp-editor .hp-slider::-webkit-slider-thumb {
-        width: 18px;
-        height: 18px;
-      }
-      .hp-editor .hp-slider::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
-      }
+    .hp-editor .hp-current-input:focus {
+      outline: none;
+      border-color: #007AFF;
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25);
+    }
+    /* Hide the increment/decrement spinner on number inputs */
+    .hp-editor input[type="number"]::-webkit-inner-spin-button,
+    .hp-editor input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .hp-editor input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    /* Temp HP row: label + number input (different from main HP) */
+    .hp-editor .hp-temp-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: #6e6e73;
+    }
+    .hp-editor .hp-temp-row label {
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .hp-editor .hp-temp-input {
+      width: 48px;
+      font-size: 0.8rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #FF9F0A;
+      background: rgba(255, 159, 10, 0.08);
+      text-align: center;
+      color: #1D1D1F;
+    }
+    .hp-editor .hp-temp-input::placeholder {
+      color: #8E8E93;
+    }
+    .hp-editor .hp-temp-input:focus {
+      outline: none;
+      border-color: #E68600;
+      box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.3);
     }
     .hp-editor .hp-meta {
       font-size: 0.65rem;
       line-height: 1.1;
+      color: #6e6e73;
     }
     .temp-input {
       width: 40px;
@@ -402,10 +431,10 @@
       display: block;
       max-width: 180px;
       text-align: right;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      height: 0.9rem; /* fixed one line so row height doesn't jump */
+      white-space: normal;
+      word-wrap: break-word;
+      line-height: 1.25;
+      font-size: 0.65rem;
     }
     table.initiative-table td.controls-cell button {
       padding: 1px 6px;
@@ -1410,8 +1439,14 @@
         } else {
           var hpEditorHtml =
             '<div class="hp-editor">' +
-              '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
-              '<input type="range" class="hp-slider hp-temp" min="0" max="999" value="' + (Math.min(999, c.tempHp || 0)) + '">' +
+              '<div class="hp-row">' +
+                '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
+                '<input type="number" class="hp-current-input" min="0" max="' + c.maxHp + '" value="' + c.hp + '" title="Current HP">' +
+              '</div>' +
+              '<div class="hp-temp-row">' +
+                '<label>Temp</label>' +
+                '<input type="number" class="hp-temp-input" min="0" max="999" value="' + (c.tempHp ? c.tempHp : '') + '" placeholder="0" title="Temp HP">' +
+              '</div>' +
               '<div class="hp-meta">' +
                 'HP ' + c.hp +
                 (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
@@ -1479,9 +1514,10 @@
         tr.appendChild(tdHp);
         tr.appendChild(tdControls);
 
-        // Wire HP sliders & conditions / concentration for this row
+        // Wire HP slider, current HP input, temp HP input & conditions for this row
         var hpMainEl = tdHp.querySelector('.hp-main');
-        var hpTempEl = tdHp.querySelector('.hp-temp');
+        var hpCurrentInput = tdHp.querySelector('.hp-current-input');
+        var hpTempInput = tdHp.querySelector('.hp-temp-input');
         var hpMetaEl = tdHp.querySelector('.hp-meta');
         function updateStatusSummary() {
           var condText = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
@@ -1515,7 +1551,6 @@
             hpMainEl.style.setProperty('--hp-fill', hpPct + '%');
             hpMainEl.style.setProperty('--hp-color', hpColor);
           }
-          if (hpTempEl) hpTempEl.style.setProperty('--temp-fill', tempPct + '%');
         }
         function updateBloodiedCondition() {
           var isBloodied = (c.maxHp > 0 && c.hp <= c.maxHp * 0.5);
@@ -1528,6 +1563,14 @@
           }
           updateStatusSummary();
         }
+        function updateHpMeta() {
+          if (hpMetaEl) {
+            hpMetaEl.textContent =
+              'HP ' + c.hp +
+              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+              '/' + c.maxHp;
+          }
+        }
         setHpBarFills();
         if (hpMainEl && hpMetaEl) {
           hpMainEl.addEventListener('input', function(ev) {
@@ -1536,15 +1579,11 @@
             if (isNaN(val) || val < 0) val = 0;
             if (val > c.maxHp) val = c.maxHp;
             c.hp = val;
+            if (hpCurrentInput) hpCurrentInput.value = val;
             setHpBarFills();
             updateBloodiedCondition();
-            if (nameDeathSpan) {
-              nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
-            }
-            hpMetaEl.textContent =
-              'HP ' + c.hp +
-              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
-              '/' + c.maxHp;
+            if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
+            updateHpMeta();
             if (tr) {
               if (c.hp <= 0) tr.classList.add('dead');
               else tr.classList.remove('dead');
@@ -1556,19 +1595,49 @@
             renderCurrentTurnPanel();
           });
         }
-
-        if (hpTempEl && hpMetaEl) {
-          hpTempEl.addEventListener('input', function(ev) {
+        if (hpCurrentInput && hpMetaEl) {
+          hpCurrentInput.addEventListener('change', function(ev) {
             ev.stopPropagation();
-            var val = parseInt(hpTempEl.value, 10);
+            var val = parseInt(hpCurrentInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > c.maxHp) val = c.maxHp;
+            c.hp = val;
+            hpCurrentInput.value = val;
+            if (hpMainEl) hpMainEl.value = val;
+            setHpBarFills();
+            updateBloodiedCondition();
+            if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
+            updateHpMeta();
+            if (tr) {
+              if (c.hp <= 0) tr.classList.add('dead');
+              else tr.classList.remove('dead');
+            }
+            if (li) {
+              if (c.hp <= 0) li.classList.add('dead');
+              else li.classList.remove('dead');
+            }
+            renderCurrentTurnPanel();
+          });
+        }
+        if (hpTempInput && hpMetaEl) {
+          hpTempInput.addEventListener('input', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpTempInput.value, 10);
             if (isNaN(val) || val < 0) val = 0;
             if (val > 999) val = 999;
             c.tempHp = val;
-            setHpBarFills();
-            hpMetaEl.textContent =
-              'HP ' + c.hp +
-              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
-              '/' + c.maxHp;
+            hpTempInput.value = val;
+            updateHpMeta();
+            renderCurrentTurnPanel();
+          });
+          hpTempInput.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpTempInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 999) val = 999;
+            c.tempHp = val;
+            hpTempInput.value = val;
+            updateHpMeta();
             renderCurrentTurnPanel();
           });
         }
