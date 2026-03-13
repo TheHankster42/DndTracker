@@ -169,6 +169,34 @@
       font-size: 0.78rem;
       color: #6e6e73;
     }
+    #save-encounter-btn {
+      width: 64px; /* fixed so Save / Saving… / Saved / Error don't resize */
+      min-width: 64px;
+      box-sizing: border-box;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    #save-encounter-btn.save-working {
+      opacity: 0.8;
+    }
+    #save-encounter-btn.save-success {
+      background: #34C759 !important;
+      color: #fff !important;
+      border-color: #34C759 !important;
+    }
+    #save-encounter-btn.save-error {
+      background: #FF3B30 !important;
+      color: #fff !important;
+      border-color: #FF3B30 !important;
+    }
+    #encounter-name-input {
+      min-width: 140px;
+      max-width: 200px;
+      padding: 4px 8px;
+      font-size: 0.78rem;
+      border-radius: 999px;
+      border: 1px solid #D1D1D6;
+      background: rgba(255, 255, 255, 0.9);
+    }
     #roll-initiative-btn {
       padding: 6px 10px;
       border-radius: 999px;
@@ -856,13 +884,16 @@
       <h3>Initiative</h3>
       <div id="initiative-panel-actions">
         <button type="button" class="panel-lock-btn" data-panel-id="initiative-panel" aria-label="Lock initiative panel">🔓</button>
+        <input type="text" id="encounter-name-input" placeholder="Encounter name" />
+        <button type="button" id="save-encounter-btn" class="secondary" style="font-size:0.75rem;">Save</button>
+        <button type="button" id="load-encounter-btn" class="secondary" style="font-size:0.75rem;">Load</button>
         <button type="button" id="roll-initiative-btn">Roll initiative</button>
         <button type="button" id="clear-initiative-btn">Clear all</button>
         <span>Arrow gesture ➜ next turn</span>
       </div>
     </div>
     <div id="initiative-panel-subtitle">
-      Add creatures in the Tracker panel or from SRD, then roll.
+      Add creatures in the Tracker panel or from SRD, then roll or save encounters.
     </div>
     <div id="initiative-table-wrap">
       <table class="initiative-table">
@@ -928,6 +959,18 @@
     <button type="button" class="primary" id="gesture-menu-toggle-debug" style="background:#34C759;">Toggle debug info</button>
   </div>
 
+  <div id="encounter-overlay" class="panel-overlay"></div>
+  <div id="encounter-panel" class="panel">
+    <h3>Saved encounters</h3>
+    <p style="margin:0 0 8px 0; font-size:0.8rem; color:#555;">
+      Tap an encounter to load it into the initiative table.
+    </p>
+    <div id="encounter-list-empty" style="font-size:0.8rem; color:#888; display:none;">
+      No encounters saved yet.
+    </div>
+    <ul id="encounter-list" class="gesture-list"></ul>
+  </div>
+
   <div id="tracker-overlay" class="panel-overlay"></div>
   <div id="tracker-panel" class="panel">
     <h3>Initiative tracker</h3>
@@ -949,9 +992,19 @@
     </div>
   </div>
 
+  <!-- Supabase client (for saved encounters etc.) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
 (function() {
   'use strict';
+
+  // Supabase client setup (public, anon key – fine for browser)
+  var SUPABASE_URL = 'https://wwbwmurriguwmmtqmhvu.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YndtdXJyaWd1d21tdHFtaHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY3OTIsImV4cCI6MjA4OTAwMjc5Mn0.19LhjVdm5_xrCYWrX4xAMQUZt_CSFB3PW2k5vEtlfSI';
+  var supabaseClient = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
 
   // ——— $1 Unistroke Recognizer (inline, from UW dollar recognizer) ———
   function Point(x, y) {
@@ -1669,6 +1722,195 @@
     renderCombatants();
   }
 
+  // Supabase-powered encounter save/load (minimal first pass)
+  async function saveCurrentEncounter() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot save encounter.');
+      return;
+    }
+    if (!combatants.length) {
+      // Nothing to save; just ignore without popping UI.
+      return;
+    }
+    var nameInput = document.getElementById('encounter-name-input');
+    var saveBtn = document.getElementById('save-encounter-btn');
+    if (saveBtn) {
+      // Immediate visual feedback so you see the click
+      saveBtn.classList.add('save-working');
+      saveBtn.textContent = 'Saving…';
+      saveBtn.disabled = true;
+    }
+    var name = (nameInput && nameInput.value && nameInput.value.trim())
+      ? nameInput.value.trim()
+      : 'Encounter ' + new Date().toLocaleString();
+
+    try {
+      var nowIso = new Date().toISOString();
+      var encRes = await supabaseClient
+        .from('encounters')
+        .insert({ name: name, created_at: nowIso, last_played_at: nowIso })
+        .select('id')
+        .single();
+      if (encRes.error) throw encRes.error;
+      var encounterId = encRes.data.id;
+
+      var rows = combatants.map(function(c, idx) {
+        return {
+          encounter_id: encounterId,
+          creature_id: null,
+          name: c.name || '—',
+          init: typeof c.init === 'number' ? c.init : null,
+          ac: (c.ac != null ? c.ac : null),
+          max_hp: (c.maxHp != null ? c.maxHp : null),
+          current_hp: (c.hp != null ? c.hp : null),
+          temp_hp: c.tempHp || 0,
+          conditions: Array.isArray(c.conditions) ? c.conditions : [],
+          is_concentrating: !!c.isConcentrating,
+          order_index: idx + 1
+        };
+      });
+
+      var rowsRes = await supabaseClient
+        .from('encounter_combatants')
+        .insert(rows);
+      if (rowsRes.error) throw rowsRes.error;
+
+      if (saveBtn) {
+        saveBtn.classList.remove('save-working');
+        saveBtn.classList.add('save-success');
+        saveBtn.textContent = 'Saved';
+        setTimeout(function() {
+          saveBtn.classList.remove('save-success');
+          saveBtn.textContent = 'Save';
+          saveBtn.disabled = false;
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Failed to save encounter', err);
+      if (saveBtn) {
+        saveBtn.classList.remove('save-working');
+        saveBtn.classList.add('save-error');
+        saveBtn.textContent = 'Error';
+        setTimeout(function() {
+          saveBtn.classList.remove('save-error');
+          saveBtn.textContent = 'Save';
+          saveBtn.disabled = false;
+        }, 2000);
+      }
+    }
+  }
+
+  async function loadEncounterById(encounterId, encounterName) {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot load encounter.');
+      return;
+    }
+    try {
+      var rowsRes = await supabaseClient
+        .from('encounter_combatants')
+        .select('*')
+        .eq('encounter_id', encounterId)
+        .order('order_index', { ascending: true });
+      if (rowsRes.error) throw rowsRes.error;
+
+      var rows = rowsRes.data || [];
+      combatants = rows.map(function(r) {
+        return Object.assign({
+          name: r.name,
+          init: r.init != null ? r.init : 0,
+          hp: r.current_hp != null ? r.current_hp : (r.max_hp != null ? r.max_hp : 0),
+          maxHp: r.max_hp != null ? r.max_hp : 0,
+          ac: r.ac != null ? r.ac : null,
+          dexMod: 0,
+          srd: null
+        }, createEmptyStateForCombatant(), {
+          tempHp: r.temp_hp || 0,
+          conditions: Array.isArray(r.conditions) ? r.conditions : [],
+          isConcentrating: !!r.is_concentrating
+        });
+      });
+      activeCombatantIndex = combatants.length ? 0 : -1;
+      renderCombatants();
+    } catch (err) {
+      console.error('Failed to load encounter', err);
+    }
+  }
+
+  async function openEncounterMenu() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot open encounter menu.');
+      return;
+    }
+    var overlay = document.getElementById('encounter-overlay');
+    var panel = document.getElementById('encounter-panel');
+    var listEl = document.getElementById('encounter-list');
+    var emptyEl = document.getElementById('encounter-list-empty');
+    if (!overlay || !panel || !listEl || !emptyEl) return;
+
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+
+    try {
+      var res = await supabaseClient
+        .from('encounters')
+        .select('id,name,created_at')
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (res.error) throw res.error;
+      var rows = res.data || [];
+      if (!rows.length) {
+        emptyEl.style.display = 'block';
+      } else {
+        rows.forEach(function(enc) {
+          var li = document.createElement('li');
+          li.className = ''; // use default .gesture-list li styling
+          var label = enc.name || 'Unnamed';
+          var date = enc.created_at ? new Date(enc.created_at).toLocaleString() : '';
+          li.innerHTML =
+            '<span class="name">' + label + (date ? ' — ' + date : '') + '</span>' +
+            '<button type="button" class="delete-btn">Delete</button>';
+
+          var deleteBtn = li.querySelector('.delete-btn');
+          if (deleteBtn) {
+            deleteBtn.addEventListener('click', function(ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              supabaseClient
+                .from('encounters')
+                .delete()
+                .eq('id', enc.id)
+                .then(function(resDel) {
+                  if (resDel.error) {
+                    console.error('Failed to delete encounter', resDel.error);
+                    return;
+                  }
+                  li.remove();
+                  if (!listEl.children.length) {
+                    emptyEl.style.display = 'block';
+                  }
+                });
+            });
+          }
+
+          li.addEventListener('click', function() {
+            panel.classList.remove('visible');
+            overlay.classList.remove('visible');
+            loadEncounterById(enc.id, enc.name);
+          });
+          listEl.appendChild(li);
+        });
+      }
+      overlay.classList.add('visible');
+      panel.classList.add('visible');
+    } catch (err) {
+      console.error('Failed to load encounter list', err);
+    }
+  }
+
+  // Expose selected functions for inline onclick handlers
+  window.saveCurrentEncounter = saveCurrentEncounter;
+  window.openEncounterMenu = openEncounterMenu;
+
   // Use a stronger RNG for d20 rolls when available so streaks are less likely
   function rollD20() {
     if (window.crypto && window.crypto.getRandomValues) {
@@ -2373,6 +2615,8 @@
 
     var rollBtn = document.getElementById('roll-initiative-btn');
     var clearInitBtn = document.getElementById('clear-initiative-btn');
+    var saveEncounterBtn = document.getElementById('save-encounter-btn');
+    var loadEncounterBtn = document.getElementById('load-encounter-btn');
     if (rollBtn) {
       rollBtn.addEventListener('click', function() {
         rollInitiativeForAll();
@@ -2381,6 +2625,16 @@
     if (clearInitBtn) {
       clearInitBtn.addEventListener('click', function() {
         clearCombatants();
+      });
+    }
+    if (saveEncounterBtn) {
+      saveEncounterBtn.addEventListener('click', function() {
+        saveCurrentEncounter();
+      });
+    }
+    if (loadEncounterBtn) {
+      loadEncounterBtn.addEventListener('click', function() {
+        openEncounterMenu();
       });
     }
   })();
@@ -2459,6 +2713,18 @@
     }
   })();
 
+  // Encounter list panel wiring
+  (function initEncounterPanelUI() {
+    var overlay = document.getElementById('encounter-overlay');
+    var panel = document.getElementById('encounter-panel');
+    if (!overlay || !panel) return;
+
+    overlay.addEventListener('click', function() {
+      panel.classList.remove('visible');
+      overlay.classList.remove('visible');
+    });
+  })();
+
   // Simple draggable panels with lock toggle
   (function initDraggablePanels() {
     var panels = [
@@ -2471,9 +2737,13 @@
     var nextZ = 50; // base above initial CSS z-indexes
 
     function onPointerDown(e, panel, handle) {
-      // Ignore drags that originate on the lock button itself
-      if (e.target && e.target.closest && e.target.closest('.panel-lock-btn')) {
-        return;
+      // Ignore drags that originate on interactive controls in the header
+      if (e.target && e.target.closest) {
+        if (e.target.closest('.panel-lock-btn') ||
+            e.target.closest('#initiative-panel-actions') ||
+            e.target.closest('#current-turn-header button')) {
+          return;
+        }
       }
       if (panel.getAttribute('data-locked') === 'true') return;
       // Only left mouse or primary pointer
