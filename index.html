@@ -26,6 +26,8 @@
       position: fixed;
       inset: 0;
       touch-action: none;
+      z-index: 200; /* above all DnD UI so strokes float on top */
+      pointer-events: none; /* container never blocks clicks */
     }
     #canvas {
       display: block;
@@ -34,6 +36,8 @@
       touch-action: none;
       border: 3px solid transparent;
       transition: border-color 0.25s ease, box-shadow 0.25s ease;
+      background: transparent;
+      pointer-events: none; /* let ALL mouse clicks/taps hit underlying DnD UI */
     }
     #canvas.record-mode {
       border-color: #FF9F0A;
@@ -58,7 +62,7 @@
       letter-spacing: -0.01em;
       opacity: 0;
       transition: opacity 0.25s ease;
-      z-index: 2;
+      z-index: 210;
       text-shadow: 0 1px 2px rgba(255,255,255,0.8);
     }
     .record-label.visible {
@@ -73,7 +77,7 @@
       font-size: 2.25rem;
       font-weight: 600;
       letter-spacing: -0.02em;
-      z-index: 10;
+      z-index: 210;
       opacity: 0;
       transition: opacity 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
@@ -98,7 +102,7 @@
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
       touch-action: manipulation;
       cursor: pointer;
-      z-index: 20;
+      z-index: 220; /* gesture / control buttons above everything */
       transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
     }
     .btn-float:hover {
@@ -109,11 +113,422 @@
       transform: scale(0.98);
       background: #004EC4;
     }
-    #btn-record {
-      left: 24px;
-    }
+    #btn-record,
     #btn-gestures {
+      display: none;
+    }
+    #btn-gesture-menu {
       right: 24px;
+      bottom: 84px;
+    }
+    #btn-tracker {
+      display: none;
+    }
+    #initiative-panel {
+      position: fixed;
+      top: 10vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(900px, 90vw);
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.94);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 14px 14px 16px;
+      z-index: 35;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+    }
+    #initiative-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    #initiative-panel-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    #initiative-panel-subtitle {
+      margin-top: 4px;
+      font-size: 0.78rem;
+      color: #6e6e73;
+    }
+    #initiative-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #6e6e73;
+    }
+    #roll-initiative-btn {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    #roll-initiative-btn:active {
+      transform: scale(0.97);
+    }
+    #initiative-table-wrap {
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.8);
+    }
+    table.initiative-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    table.initiative-table thead {
+      background: rgba(242, 242, 247, 0.9);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    table.initiative-table th,
+    table.initiative-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      white-space: nowrap;
+    }
+    table.initiative-table th {
+      font-weight: 600;
+      color: #3a3a3c;
+    }
+    table.initiative-table tbody tr.active {
+      background: rgba(0, 122, 255, 0.14);
+    }
+    table.initiative-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    table.initiative-table td.hp-cell {
+      font-weight: 500;
+      vertical-align: top;
+      min-width: 110px;
+    }
+    .hp-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .hp-editor .hp-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 0;
+      border-radius: 999px;
+      background: transparent;
+      outline: none;
+      padding: 0;
+      margin: 0;
+    }
+    .hp-editor .hp-main {
+      background: transparent;
+    }
+    .hp-editor .hp-temp {
+      background: transparent;
+    }
+    .hp-editor .hp-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #007AFF;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    }
+    .hp-editor .hp-temp::-webkit-slider-thumb {
+      background: #FF9F0A;
+    }
+    /* HP bar: colour shifts from green (healthy) to red (low) over grey track */
+    .hp-editor .hp-main::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--hp-color, #34C759) 0%,
+        var(--hp-color, #34C759) var(--hp-fill, 0%),
+        #E5E5EA var(--hp-fill, 0%),
+        #E5E5EA 100%
+      );
+    }
+    .hp-editor .hp-main::-moz-range-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--hp-color, #34C759) 0%,
+        var(--hp-color, #34C759) var(--hp-fill, 0%),
+        #E5E5EA var(--hp-fill, 0%),
+        #E5E5EA 100%
+      );
+    }
+    /* Temp HP bar: orange fill over transparent */
+    .hp-editor .hp-temp::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(to right, #FF9F0A 0%, #FF9F0A var(--temp-fill, 0%), transparent var(--temp-fill, 0%), transparent 100%);
+    }
+    .hp-editor .hp-temp::-moz-range-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(to right, #FF9F0A 0%, #FF9F0A var(--temp-fill, 0%), transparent var(--temp-fill, 0%), transparent 100%);
+    }
+    .hp-editor .hp-slider::-moz-range-thumb {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #007AFF;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    }
+    .hp-editor .hp-temp::-moz-range-thumb {
+      background: #FF9F0A;
+    }
+    .hp-editor .hp-meta {
+      font-size: 0.65rem;
+      line-height: 1.1;
+    }
+    .temp-input {
+      width: 40px;
+      font-size: 0.7rem;
+      padding: 1px 2px;
+      border-radius: 4px;
+      border: 1px solid #D1D1D6;
+      text-align: center;
+    }
+    .controls-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+    .controls-main-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .controls-secondary-row {
+      display: block;
+      max-width: 180px;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 0.9rem; /* reserve one line so row height doesn't jump */
+    }
+    table.initiative-table td.controls-cell button {
+      padding: 1px 6px;
+      font-size: 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      background: #f2f2f7;
+      cursor: pointer;
+    }
+    .controls-cell label {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .controls-cell select {
+      font-size: 0.7rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid #D1D1D6;
+      max-width: 120px;
+      background: #fff;
+    }
+    .controls-cell .remove-btn {
+      color: #FF3B30;
+      border-color: rgba(255, 59, 48, 0.5);
+      background: transparent;
+    }
+    .controls-cell .status-summary {
+      display: inline-block;
+      font-size: 0.65rem;
+      color: #555;
+    }
+    #monster-panel {
+      position: fixed;
+      top: 10vh;
+      left: 16px;
+      width: min(280px, 32vw);
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.96);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 10px 12px 12px;
+      z-index: 34;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+    }
+    #monster-panel h3 {
+      margin: 0 0 4px 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    #monster-filter {
+      width: 100%;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #monster-list-wrap {
+      flex: 1 1 auto;
+      min-height: 80px;
+      max-height: 50vh;
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.85);
+      margin-bottom: 6px;
+    }
+    #monster-list {
+      list-style: none;
+      margin: 0;
+      padding: 4px 0;
+      font-size: 0.78rem;
+    }
+    #monster-list li {
+      padding: 4px 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #monster-list li:hover {
+      background: rgba(0, 122, 255, 0.12);
+    }
+    #monster-list li span.name {
+      font-weight: 500;
+    }
+    #monster-list li span.meta {
+      font-size: 0.7rem;
+      color: #6e6e73;
+      margin-left: 4px;
+    }
+    #monster-manual {
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding-top: 4px;
+      margin-top: 2px;
+      font-size: 0.78rem;
+    }
+    #monster-manual input {
+      width: 100%;
+      margin-bottom: 4px;
+      padding: 5px 7px;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      font-size: 0.78rem;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #monster-manual button {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #current-turn-panel {
+      position: fixed;
+      top: 10vh;
+      right: 16px;
+      width: min(340px, 40vw);
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.96);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 12px 14px 14px;
+      z-index: 36;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+    }
+    #current-turn-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 8px;
+    }
+    #current-turn-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    #current-turn-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 2px;
+    }
+    #current-turn-subtitle {
+      font-size: 0.75rem;
+      color: #6e6e73;
+      margin-bottom: 6px;
+    }
+    #current-turn-body {
+      overflow-y: auto;
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    #current-turn-body section {
+      margin-bottom: 8px;
+    }
+    #current-turn-body strong.label {
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      color: #6e6e73;
+      display: block;
+      margin-bottom: 2px;
+    }
+    #current-turn-body .abilities-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    #current-turn-body .abilities-row span {
+      flex: 1 1 0;
+      text-align: center;
+    }
+    #current-turn-body ul {
+      padding-left: 16px;
+      margin: 2px 0 0 0;
+    }
+    #current-turn-body li {
+      margin-bottom: 2px;
     }
     #debug-toggle {
       position: fixed;
@@ -139,7 +554,7 @@
       font-size: 0.8125rem;
       font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
-      z-index: 25;
+      z-index: 260; /* above gesture canvas */
       display: none;
       touch-action: manipulation;
     }
@@ -153,7 +568,7 @@
       background: rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
-      z-index: 40;
+      z-index: 290; /* above gesture canvas, below floating buttons */
       display: none;
       touch-action: manipulation;
       transition: opacity 0.3s ease;
@@ -173,7 +588,7 @@
       border-radius: 16px 16px 0 0;
       box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06) inset;
       padding: 28px 24px  calc(28px + env(safe-area-inset-bottom));
-      z-index: 50;
+      z-index: 300; /* above gesture canvas */
       touch-action: manipulation;
       transform: translateY(100%);
       transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
@@ -270,6 +685,85 @@
       border-color: #FF3B30;
     }
     .gesture-list .delete-btn.builtin { display: none; }
+    .tracker-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .tracker-controls input[type="text"],
+    .tracker-controls input[type="number"] {
+      flex: 1 1 120px;
+      min-width: 0;
+      padding: 9px 10px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    .tracker-controls button {
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .tracker-controls button.secondary {
+      background: #E5E5EA;
+      color: #1D1D1F;
+    }
+    .tracker-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 42vh;
+      overflow-y: auto;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .tracker-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 0.9rem;
+    }
+    .tracker-list li:last-child {
+      border-bottom: none;
+    }
+    .tracker-list li.active {
+      background: rgba(0, 122, 255, 0.12);
+    }
+    .tracker-list .name {
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .tracker-list .meta {
+      font-size: 0.8rem;
+      color: #555;
+    }
+    .tracker-list .hp {
+      font-weight: 500;
+      margin-right: 6px;
+    }
+    .tracker-list .controls {
+      display: flex;
+      gap: 4px;
+      margin-left: 8px;
+    }
+    .tracker-list .controls button {
+      padding: 4px 6px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.15);
+      background: #F2F2F7;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -278,8 +772,71 @@
     <div id="record-label" class="record-label">Draw your gesture now</div>
     <div id="feedback-label"></div>
   </div>
+  <div id="monster-panel">
+    <h3>Monsters</h3>
+    <input type="text" id="monster-filter" placeholder="Search SRD (goblin, dragon...)" />
+    <div style="margin:4px 0 6px 0; font-size:0.78rem; color:#555;">
+      <label style="display:flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="monster-roll-hp-toggle" />
+        <span>Roll HP from hit dice</span>
+      </label>
+    </div>
+    <div id="monster-list-wrap">
+      <ul id="monster-list"></ul>
+    </div>
+    <div id="monster-manual">
+      <div style="margin-bottom:2px; font-weight:500;">Add custom creature</div>
+      <input type="text" id="monster-manual-name" placeholder="Name" />
+      <input type="number" id="monster-manual-init" placeholder="Init bonus (Dex mod)" />
+      <input type="number" id="monster-manual-hp" placeholder="HP" />
+      <input type="number" id="monster-manual-ac" placeholder="AC" />
+      <button type="button" id="monster-manual-add">Add non-SRD</button>
+    </div>
+  </div>
+  <div id="initiative-panel">
+    <div id="initiative-panel-header">
+      <h3>Initiative</h3>
+      <div id="initiative-panel-actions">
+        <button type="button" id="roll-initiative-btn">Roll initiative</button>
+        <button type="button" id="clear-initiative-btn">Clear all</button>
+        <span>Arrow gesture ➜ next turn</span>
+      </div>
+    </div>
+    <div id="initiative-panel-subtitle">
+      Add creatures in the Tracker panel or from SRD, then roll.
+    </div>
+    <div id="initiative-table-wrap">
+      <table class="initiative-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Init</th>
+            <th>AC</th>
+            <th>HP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="initiative-table-body">
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="current-turn-panel">
+    <div id="current-turn-header">
+      <h3>Current turn</h3>
+      <span style="font-size:0.75rem;color:#6e6e73;" id="current-turn-order"></span>
+    </div>
+    <div id="current-turn-name"></div>
+    <div id="current-turn-subtitle"></div>
+    <div id="current-turn-body">
+      <!-- Filled from JS based on active combatant / SRD info -->
+    </div>
+  </div>
   <button type="button" class="btn-float" id="btn-record">Record Gesture</button>
   <button type="button" class="btn-float" id="btn-gestures">Gestures</button>
+  <button type="button" class="btn-float" id="btn-gesture-menu">Gesture menu</button>
+  <button type="button" class="btn-float" id="btn-tracker">Tracker</button>
   <div id="debug-toggle" title="Toggle debug"></div>
   <div id="debug-panel">
     <p><strong>pointerType:</strong> <span id="debug-pointer">—</span></p>
@@ -298,6 +855,38 @@
   <div id="library-panel" class="panel">
     <h3>Gesture library</h3>
     <ul id="gesture-list" class="gesture-list"></ul>
+  </div>
+
+  <div id="gesture-menu-overlay" class="panel-overlay"></div>
+  <div id="gesture-menu-panel" class="panel">
+    <h3>Gesture shortcuts</h3>
+    <p style="margin:0 0 8px 0; font-size:0.85rem; color:#555;">
+      Draw with Apple Pencil anywhere to trigger shortcuts. Use this menu to record, review, and debug.
+    </p>
+    <button type="button" class="primary" id="gesture-menu-record" style="margin-bottom:8px;">Record new gesture</button>
+    <button type="button" class="primary" id="gesture-menu-library" style="margin-bottom:8px; background:#5856D6;">Open gesture library</button>
+    <button type="button" class="primary" id="gesture-menu-toggle-debug" style="background:#34C759;">Toggle debug info</button>
+  </div>
+
+  <div id="tracker-overlay" class="panel-overlay"></div>
+  <div id="tracker-panel" class="panel">
+    <h3>Initiative tracker</h3>
+    <div class="tracker-controls">
+      <input type="text" id="tracker-name" placeholder="Name (Goblin, Alice, etc.)" />
+      <input type="number" id="tracker-init" placeholder="Init" />
+      <input type="number" id="tracker-hp" placeholder="HP" />
+      <input type="number" id="tracker-ac" placeholder="AC" />
+      <button type="button" id="tracker-add">Add</button>
+      <button type="button" class="secondary" id="tracker-clear">Clear</button>
+    </div>
+    <div class="tracker-controls">
+      <input type="text" id="tracker-srd-query" placeholder="Search SRD (e.g. goblin)" />
+      <button type="button" id="tracker-srd-add">Add SRD monster</button>
+    </div>
+    <ul id="tracker-list" class="tracker-list"></ul>
+    <div style="margin-top:12px;font-size:0.8rem;color:#555;">
+      Arrow gesture ➜ advance turn (NEXT). You can record your own gestures and map them mentally to tracker actions.
+    </div>
   </div>
 
   <script>
@@ -513,19 +1102,47 @@
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       var arr = JSON.parse(raw);
+      var changed = false;
       for (var i = 0; i < arr.length; i++) {
         var o = arr[i];
-        var rawPts = (o.points || []).map(function(p) { return { x: p.X != null ? p.X : p.x, y: p.Y != null ? p.Y : p.y }; });
+        var rawPts = (o.points || []).map(function(p) {
+          return { x: p.X != null ? p.X : p.x, y: p.Y != null ? p.Y : p.y };
+        });
+        // Skip any corrupted gestures (non-numeric coords)
+        if (!rawPts.length) continue;
+        var allValid = true;
+        for (var j = 0; j < rawPts.length; j++) {
+          var px = rawPts[j].x;
+          var py = rawPts[j].y;
+          if (typeof px !== 'number' || !isFinite(px) ||
+              typeof py !== 'number' || !isFinite(py)) {
+            allValid = false;
+            break;
+          }
+        }
+        if (!allValid) {
+          changed = true;
+          continue;
+        }
         if (rawPts.length >= 10) {
           var pts = rawPts.map(function(p) { return new Point(p.x, p.y); });
           recognizer.AddGesture(o.name, pts);
           customGestureRaw[o.name] = rawPts;
         }
       }
+      if (changed) {
+        // Rewrite storage without corrupted gestures
+        saveGestures(recognizer);
+      }
     } catch (e) {}
   }
   function saveCustomGestureRaw(name, points) {
-    customGestureRaw[name] = points.map(function(p) { return { x: p.x, y: p.y }; });
+    customGestureRaw[name] = points.map(function(p) {
+      // Support both raw {x,y} and Point {X,Y}
+      var x = (p.x != null ? p.x : p.X);
+      var y = (p.y != null ? p.y : p.Y);
+      return { x: x, y: y };
+    });
   }
   function removeCustomGestureRaw(name) {
     delete customGestureRaw[name];
@@ -557,6 +1174,750 @@
   var lastResultScore = '—';
   var lastRecognitionTime = '—';
 
+  // Initiative tracker state
+  var combatants = [];
+  var activeCombatantIndex = -1;
+  var srdMonsterCache = {}; // key: monster index, value: full monster JSON
+  var monsterIndex = []; // list of all SRD monsters (index + name + url)
+  var useRolledHp = false; // if true, new SRD monsters roll HP from hit dice
+
+  function createEmptyStateForCombatant() {
+    return {
+      tempHp: 0,
+      conditions: [],
+      isConcentrating: false
+    };
+  }
+
+  function sortCombatants() {
+    combatants.sort(function(a, b) {
+      if (b.init === a.init) return (b.dexMod || 0) - (a.dexMod || 0);
+      return b.init - a.init;
+    });
+  }
+
+  function renderCombatants() {
+    var listEl = document.getElementById('tracker-list');
+    var tableBody = document.getElementById('initiative-table-body');
+
+    if (listEl) {
+      listEl.innerHTML = '';
+    }
+    if (tableBody) {
+      tableBody.innerHTML = '';
+    }
+
+    combatants.forEach(function(c, idx) {
+      // Tracker panel list
+      if (listEl) {
+        var li = document.createElement('li');
+        if (idx === activeCombatantIndex) li.classList.add('active');
+        var left = document.createElement('div');
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = c.name || '—';
+        var metaSpan = document.createElement('span');
+        metaSpan.className = 'meta';
+        metaSpan.textContent = 'Init ' + c.init + ' • AC ' + (c.ac != null ? c.ac : '—');
+        left.appendChild(nameSpan);
+        left.appendChild(metaSpan);
+
+        var right = document.createElement('div');
+        var hpSpan = document.createElement('span');
+        hpSpan.className = 'hp';
+        hpSpan.textContent = 'HP ' + c.hp +
+          (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+          '/' + c.maxHp;
+        right.appendChild(hpSpan);
+
+        li.appendChild(left);
+        li.appendChild(right);
+        listEl.appendChild(li);
+      }
+
+      // Main-page initiative table
+      if (tableBody) {
+        var tr = document.createElement('tr');
+        if (idx === activeCombatantIndex) tr.classList.add('active');
+
+        var tdOrder = document.createElement('td');
+        tdOrder.textContent = (idx + 1).toString();
+
+        var tdName = document.createElement('td');
+        tdName.textContent = c.name || '—';
+
+        var tdInit = document.createElement('td');
+        tdInit.textContent = String(c.init);
+
+        var tdAc = document.createElement('td');
+        tdAc.textContent = (c.ac != null ? c.ac : '—');
+
+        var tdHp = document.createElement('td');
+        tdHp.className = 'hp-cell';
+        var hpEditorHtml =
+          '<div class="hp-editor">' +
+            '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
+            '<input type="range" class="hp-slider hp-temp" min="0" max="999" value="' + (Math.min(999, c.tempHp || 0)) + '">' +
+            '<div class="hp-meta">' +
+              'HP ' + c.hp +
+              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+              '/' + c.maxHp +
+            '</div>' +
+          '</div>';
+        tdHp.innerHTML = hpEditorHtml;
+
+        var tdControls = document.createElement('td');
+        tdControls.className = 'controls-cell';
+
+        var controlsMain = document.createElement('div');
+        controlsMain.className = 'controls-main-row';
+
+        // Conditions selector (single-select toggle: pick/add/remove, supports multiple active)
+        var condSelect = document.createElement('select');
+        var placeholderOpt = document.createElement('option');
+        placeholderOpt.value = '';
+        placeholderOpt.textContent = 'Add condition…';
+        placeholderOpt.disabled = true;
+        placeholderOpt.selected = true;
+        condSelect.appendChild(placeholderOpt);
+        var noneOpt = document.createElement('option');
+        noneOpt.value = 'None';
+        noneOpt.textContent = 'Clear all';
+        condSelect.appendChild(noneOpt);
+        var condOptions = ['Blinded','Bloodied','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
+        condOptions.forEach(function(name) {
+          var opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          condSelect.appendChild(opt);
+        });
+        controlsMain.appendChild(condSelect);
+
+        // Concentration toggle
+        var concLabel = document.createElement('label');
+        concLabel.title = 'Concentrating';
+        var concCheckbox = document.createElement('input');
+        concCheckbox.type = 'checkbox';
+        concCheckbox.checked = !!c.isConcentrating;
+        concLabel.appendChild(concCheckbox);
+        concLabel.appendChild(document.createTextNode('Conc'));
+        controlsMain.appendChild(concLabel);
+
+        // Remove button
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = 'X';
+        controlsMain.appendChild(removeBtn);
+
+        tdControls.appendChild(controlsMain);
+
+        // Status summary (conditions + concentration) display
+        var statusSpan = document.createElement('div');
+        statusSpan.className = 'status-summary controls-secondary-row';
+        tdControls.appendChild(statusSpan);
+
+        tr.appendChild(tdOrder);
+        tr.appendChild(tdName);
+        tr.appendChild(tdInit);
+        tr.appendChild(tdAc);
+        tr.appendChild(tdHp);
+        tr.appendChild(tdControls);
+
+        // Wire HP sliders & conditions / concentration for this row
+        var hpMainEl = tdHp.querySelector('.hp-main');
+        var hpTempEl = tdHp.querySelector('.hp-temp');
+        var hpMetaEl = tdHp.querySelector('.hp-meta');
+        function updateStatusSummary() {
+          var condText = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
+          var concText = c.isConcentrating ? 'Conc' : '';
+          var parts = [];
+          if (condText) parts.push(condText);
+          if (concText) parts.push(concText);
+          var summary = parts.join(' | ');
+          statusSpan.textContent = summary;
+          statusSpan.title = summary || '';
+        }
+        function setHpBarFills() {
+          var hpFrac = (c.maxHp > 0 ? (c.hp / c.maxHp) : 0);
+          if (hpFrac < 0) hpFrac = 0;
+          if (hpFrac > 1) hpFrac = 1;
+          var hpPct = hpFrac * 100;
+          var tempPct = Math.min(100, ((c.tempHp || 0) / 999) * 100);
+
+          // Interpolate HP colour between green (#34C759) and red (#FF3B30)
+          var green = { r: 0x34, g: 0xC7, b: 0x59 };
+          var red   = { r: 0xFF, g: 0x3B, b: 0x30 };
+          var r = Math.round(red.r + (green.r - red.r) * hpFrac);
+          var g = Math.round(red.g + (green.g - red.g) * hpFrac);
+          var b = Math.round(red.b + (green.b - red.b) * hpFrac);
+          var hpColor = '#' +
+            r.toString(16).padStart(2, '0') +
+            g.toString(16).padStart(2, '0') +
+            b.toString(16).padStart(2, '0');
+
+          if (hpMainEl) {
+            hpMainEl.style.setProperty('--hp-fill', hpPct + '%');
+            hpMainEl.style.setProperty('--hp-color', hpColor);
+          }
+          if (hpTempEl) hpTempEl.style.setProperty('--temp-fill', tempPct + '%');
+        }
+        function updateBloodiedCondition() {
+          var isBloodied = (c.maxHp > 0 && c.hp <= c.maxHp * 0.5);
+          if (!c.conditions) c.conditions = [];
+          var idx = c.conditions.indexOf('Bloodied');
+          if (isBloodied && idx === -1) {
+            c.conditions.push('Bloodied');
+          } else if (!isBloodied && idx !== -1) {
+            c.conditions.splice(idx, 1);
+          }
+          updateStatusSummary();
+        }
+        setHpBarFills();
+        if (hpMainEl && hpMetaEl) {
+          hpMainEl.addEventListener('input', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpMainEl.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > c.maxHp) val = c.maxHp;
+            c.hp = val;
+            setHpBarFills();
+            updateBloodiedCondition();
+            hpMetaEl.textContent =
+              'HP ' + c.hp +
+              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+              '/' + c.maxHp;
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (hpTempEl && hpMetaEl) {
+          hpTempEl.addEventListener('input', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpTempEl.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 999) val = 999;
+            c.tempHp = val;
+            setHpBarFills();
+            hpMetaEl.textContent =
+              'HP ' + c.hp +
+              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+              '/' + c.maxHp;
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (condSelect) {
+          condSelect.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            if (!c.conditions) c.conditions = [];
+            var val = condSelect.value;
+            if (!val) {
+              // placeholder, ignore
+              return;
+            }
+            if (val === 'None') {
+              // Clear all conditions except auto-managed ones like Bloodied
+              c.conditions = c.conditions.filter(function(name) { return name === 'Bloodied'; });
+            } else {
+              var idxCond = c.conditions.indexOf(val);
+              if (idxCond === -1) {
+                // Add condition
+                c.conditions.push(val);
+              } else {
+                // Remove condition if already present
+                c.conditions.splice(idxCond, 1);
+              }
+            }
+            // Reset dropdown back to placeholder so next pick is explicit
+            condSelect.value = '';
+            updateStatusSummary();
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (concCheckbox) {
+          concCheckbox.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            c.isConcentrating = !!concCheckbox.checked;
+            updateStatusSummary();
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (removeBtn) {
+          removeBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            removeCombatantAt(idx);
+          });
+        }
+
+        // Initialize status summary display
+        updateStatusSummary();
+
+        tr.addEventListener('click', function(evt) {
+          // Avoid changing turn when clicking HP controls or row buttons
+          if (evt.target && evt.target.closest &&
+              (evt.target.closest('.hp-editor') || evt.target.closest('.controls-cell'))) {
+            return;
+          }
+          activeCombatantIndex = idx;
+          renderCombatants();
+        });
+
+        tableBody.appendChild(tr);
+      }
+    });
+
+    renderCurrentTurnPanel();
+  }
+
+  function goToNextCombatant() {
+    if (!combatants.length) return;
+    activeCombatantIndex = (activeCombatantIndex + 1) % combatants.length;
+    renderCombatants();
+  }
+
+  function goToPreviousCombatant() {
+    if (!combatants.length) return;
+    activeCombatantIndex = (activeCombatantIndex - 1 + combatants.length) % combatants.length;
+    renderCombatants();
+  }
+
+  function addCombatantFromInputs() {
+    var nameEl = document.getElementById('tracker-name');
+    var initEl = document.getElementById('tracker-init');
+    var hpEl = document.getElementById('tracker-hp');
+    var acEl = document.getElementById('tracker-ac');
+    if (!nameEl || !initEl || !hpEl || !acEl) return;
+    var name = nameEl.value.trim() || 'Creature';
+    var initBonus = parseInt(initEl.value, 10);
+    var hp = parseInt(hpEl.value, 10);
+    var ac = parseInt(acEl.value, 10);
+    if (isNaN(initBonus)) initBonus = 0;
+    if (isNaN(hp)) hp = 10;
+    if (isNaN(ac)) ac = 10;
+    combatants.push(Object.assign({
+      name: name,
+      init: 10 + initBonus,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: initBonus,
+      srd: null
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+    nameEl.value = '';
+    initEl.value = '';
+    hpEl.value = '';
+    acEl.value = '';
+  }
+
+  function addManualCombatantFromMonsterPanel() {
+    var nameEl = document.getElementById('monster-manual-name');
+    var initEl = document.getElementById('monster-manual-init');
+    var hpEl = document.getElementById('monster-manual-hp');
+    var acEl = document.getElementById('monster-manual-ac');
+    if (!nameEl || !hpEl || !acEl) return;
+    var name = (nameEl.value || '').trim() || 'Creature';
+    var initBonus = parseInt(initEl.value, 10);
+    var hp = parseInt(hpEl.value, 10);
+    var ac = parseInt(acEl.value, 10);
+    if (isNaN(initBonus)) initBonus = 0;
+    if (isNaN(hp)) hp = 10;
+    if (isNaN(ac)) ac = 10;
+    combatants.push(Object.assign({
+      name: name,
+      init: 10 + initBonus,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: initBonus,
+      srd: null
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+    nameEl.value = '';
+    initEl.value = '';
+    hpEl.value = '';
+    acEl.value = '';
+  }
+
+  function clearCombatants() {
+    combatants = [];
+    activeCombatantIndex = -1;
+    renderCombatants();
+  }
+
+  function removeCombatantAt(index) {
+    if (index < 0 || index >= combatants.length) return;
+    combatants.splice(index, 1);
+    if (!combatants.length) {
+      activeCombatantIndex = -1;
+    } else if (activeCombatantIndex >= combatants.length) {
+      activeCombatantIndex = combatants.length - 1;
+    } else if (index < activeCombatantIndex) {
+      activeCombatantIndex -= 1;
+    }
+    renderCombatants();
+  }
+
+  function rollInitiativeForAll() {
+    if (!combatants.length) return;
+    combatants.forEach(function(c) {
+      var mod;
+      if (c.srd && typeof c.srd.dex === 'number') {
+        mod = Math.floor((c.srd.dex - 10) / 2);
+        c.dexMod = mod;
+      } else if (typeof c.dexMod === 'number') {
+        mod = c.dexMod;
+      } else {
+        mod = 0;
+      }
+      var roll = Math.floor(Math.random() * 20) + 1;
+      c.init = roll + mod;
+    });
+    sortCombatants();
+    activeCombatantIndex = 0;
+    renderCombatants();
+  }
+
+  function renderCurrentTurnPanel() {
+    var panelOrder = document.getElementById('current-turn-order');
+    var nameEl = document.getElementById('current-turn-name');
+    var subtitleEl = document.getElementById('current-turn-subtitle');
+    var bodyEl = document.getElementById('current-turn-body');
+    if (!panelOrder || !nameEl || !subtitleEl || !bodyEl) return;
+
+    if (!combatants.length || activeCombatantIndex < 0 || activeCombatantIndex >= combatants.length) {
+      panelOrder.textContent = '';
+      nameEl.textContent = 'No active creature';
+      subtitleEl.textContent = 'Add creatures and roll initiative to begin.';
+      bodyEl.innerHTML = '';
+      return;
+    }
+
+    var c = combatants[activeCombatantIndex];
+    var orderText = (activeCombatantIndex + 1) + ' / ' + combatants.length;
+    panelOrder.textContent = orderText;
+    nameEl.textContent = c.name || '—';
+
+    var subtitle = 'Init ' + c.init + ' • AC ' + (c.ac != null ? c.ac : '—');
+    subtitleEl.textContent = subtitle;
+
+    var srd = c.srd;
+    if (!srd) {
+      bodyEl.innerHTML =
+        '<section>' +
+          '<strong class="label">Details</strong>' +
+          '<div>Manual creature (no SRD data attached).</div>' +
+        '</section>';
+      return;
+    }
+
+    function abilityBlock(label, score) {
+      if (score == null) return label + ' —';
+      var mod = Math.floor((score - 10) / 2);
+      var modStr = (mod >= 0 ? '+' + mod : String(mod));
+      return label + ' ' + score + ' ' + modStr;
+    }
+
+    var basics = [];
+    if (srd.size || srd.type) {
+      basics.push([srd.size, srd.type].filter(Boolean).join(' '));
+    }
+    if (srd.alignment) {
+      basics.push(srd.alignment);
+    }
+    if (srd.speed) {
+      var speedParts = [];
+      if (typeof srd.speed === 'string') {
+        speedParts.push(srd.speed);
+      } else {
+        for (var key in srd.speed) {
+          if (!srd.speed.hasOwnProperty(key)) continue;
+          speedParts.push(key + ' ' + srd.speed[key]);
+        }
+      }
+      if (speedParts.length) basics.push('Speed: ' + speedParts.join(', '));
+    }
+
+    var abilitiesRow =
+      '<div class="abilities-row">' +
+        '<span>' + abilityBlock('STR', srd.strength) + '</span>' +
+        '<span>' + abilityBlock('DEX', srd.dexterity) + '</span>' +
+        '<span>' + abilityBlock('CON', srd.constitution) + '</span>' +
+      '</div>' +
+      '<div class="abilities-row" style="margin-top:2px;">' +
+        '<span>' + abilityBlock('INT', srd.intelligence) + '</span>' +
+        '<span>' + abilityBlock('WIS', srd.wisdom) + '</span>' +
+        '<span>' + abilityBlock('CHA', srd.charisma) + '</span>' +
+      '</div>';
+
+    function listToHtml(arr, max) {
+      if (!arr || !arr.length) return '<div>—</div>';
+      var limit = typeof max === 'number' ? max : arr.length;
+      var html = '<ul>';
+      for (var i = 0; i < arr.length && i < limit; i++) {
+        var item = arr[i];
+        html += '<li><strong>' + (item.name || 'Action') + '.</strong> ' +
+          (item.desc || '') + '</li>';
+      }
+      if (arr.length > limit) {
+        html += '<li>… and ' + (arr.length - limit) + ' more.</li>';
+      }
+      html += '</ul>';
+      return html;
+    }
+
+    var senses = srd.senses ? Object.keys(srd.senses).map(function(k) {
+      return k.replace(/_/g, ' ') + ' ' + srd.senses[k];
+    }).join(', ') : '';
+
+    var skills = '';
+    var saves = '';
+    if (Array.isArray(srd.proficiencies)) {
+      var skillParts = [];
+      var saveParts = [];
+      srd.proficiencies.forEach(function(p) {
+        if (!p.proficiency || !p.proficiency.index) return;
+        var idx = p.proficiency.index;
+        if (idx.indexOf('skill-') === 0) {
+          var name = idx.replace('skill-', '').replace(/-/g, ' ');
+          name = name.replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
+          skillParts.push(name + ' +' + p.value);
+        } else if (idx.indexOf('saving-throw-') === 0) {
+          var abil = idx.replace('saving-throw-', '').toUpperCase();
+          saveParts.push(abil + ' +' + p.value);
+        }
+      });
+      skills = skillParts.join(', ');
+      saves = saveParts.join(', ');
+    }
+
+    var languages = srd.languages || '';
+    var cr = (srd.challenge_rating != null ? srd.challenge_rating : '');
+    var passive = (srd.senses && (srd.senses.passive_perception != null))
+      ? srd.senses.passive_perception
+      : null;
+
+    var dmgRes = (srd.damage_resistances || []).join(', ');
+    var dmgImm = (srd.damage_immunities || []).join(', ');
+    var dmgVuln = (srd.damage_vulnerabilities || []).join(', ');
+    var condImm = (srd.condition_immunities || []).map(function(ci) {
+      return ci.name || '';
+    }).filter(Boolean).join(', ');
+
+    var html = '';
+    html += '<section><strong class="label">Basics</strong>';
+    if (basics.length) {
+      html += '<div>' + basics.join('<br>') + '</div>';
+    } else {
+      html += '<div>—</div>';
+    }
+    html += '</section>';
+
+    html += '<section><strong class="label">Abilities</strong>' + abilitiesRow + '</section>';
+
+    html += '<section><strong class="label">Defenses & senses</strong>';
+    html += '<div>';
+    if (saves) html += 'Saves: ' + saves + '<br>';
+    if (skills) html += 'Skills: ' + skills + '<br>';
+    if (senses) html += 'Senses: ' + senses + '<br>';
+    if (passive != null) html += 'Passive Perception: ' + passive + '<br>';
+    if (dmgRes) html += 'Resistances: ' + dmgRes + '<br>';
+    if (dmgImm) html += 'Immunities: ' + dmgImm + '<br>';
+    if (dmgVuln) html += 'Vulnerabilities: ' + dmgVuln + '<br>';
+    if (condImm) html += 'Condition Immunities: ' + condImm + '<br>';
+    if (languages) html += 'Languages: ' + languages + '<br>';
+    if (cr !== '') html += 'CR: ' + cr;
+    if (!saves && !skills && !senses && passive == null && !dmgRes && !dmgImm && !dmgVuln && !condImm && !languages && cr === '') html += '—';
+    html += '</div></section>';
+
+    // Active conditions / concentration (from combat tracker state)
+    var activeConds = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
+    var concText = c.isConcentrating ? 'Concentrating' : '';
+    var statusPieces = [];
+    if (activeConds) statusPieces.push('Conditions: ' + activeConds);
+    if (concText) statusPieces.push(concText);
+    html += '<section><strong class="label">Status</strong><div>' +
+      (statusPieces.length ? statusPieces.join('<br>') : '—') +
+      '</div></section>';
+
+    html += '<section><strong class="label">Traits & features</strong>' +
+      listToHtml(srd.special_abilities || [], 6) + '</section>';
+
+    html += '<section><strong class="label">Actions</strong>' +
+      listToHtml(srd.actions || [], 10) + '</section>';
+
+    html += '<section><strong class="label">Reactions</strong>' +
+      listToHtml(srd.reactions || [], 6) + '</section>';
+
+    html += '<section><strong class="label">Legendary actions</strong>' +
+      listToHtml(srd.legendary_actions || [], 6) + '</section>';
+
+    bodyEl.innerHTML = html;
+  }
+
+  function createCombatantFromMonster(monster, query) {
+    if (!monster) return;
+    var name = monster.name || query;
+    var hp;
+    // If toggle is on and we have a roll expression, roll HP; otherwise use average
+    if (useRolledHp && typeof monster.hit_points_roll === 'string' && monster.hit_points_roll.length) {
+      hp = rollFromExpression(monster.hit_points_roll);
+    } else {
+      hp = (monster.hit_points != null ? monster.hit_points : 10);
+    }
+    var ac = (Array.isArray(monster.armor_class) && monster.armor_class.length
+      ? monster.armor_class[0].value
+      : (monster.armor_class && monster.armor_class.base) || 10);
+    var dexScore = (typeof monster.dexterity === 'number')
+      ? monster.dexterity
+      : 10;
+    var dexMod = Math.floor((dexScore - 10) / 2);
+    var init = 10 + dexMod;
+    combatants.push(Object.assign({
+      name: name,
+      init: init,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: dexMod,
+      srd: monster
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+  }
+
+  function addCombatantFromSrd(query) {
+    if (!query) return;
+    var q = query.trim();
+    if (!q) return;
+    var lower = q.toLowerCase();
+
+    // Try to reuse from cache by name match first (cheap scan, cache is small)
+    for (var key in srdMonsterCache) {
+      if (!srdMonsterCache.hasOwnProperty(key)) continue;
+      var cached = srdMonsterCache[key];
+      if (cached && cached.name && cached.name.toLowerCase() === lower) {
+        createCombatantFromMonster(cached, q);
+        return;
+      }
+    }
+
+    var url = 'https://www.dnd5eapi.co/api/monsters?name=' + encodeURIComponent(q);
+    fetch(url)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data.results || !data.results.length) return null;
+        var first = data.results[0];
+        // If we've already cached this exact index, reuse it
+        if (first.index && srdMonsterCache[first.index]) {
+          return srdMonsterCache[first.index];
+        }
+        return fetch('https://www.dnd5eapi.co' + first.url)
+          .then(function(res) { return res.json(); })
+          .then(function(monster) {
+            if (monster && first.index) {
+              srdMonsterCache[first.index] = monster;
+            }
+            return monster;
+          });
+      })
+      .then(function(monster) {
+        if (!monster) return;
+        createCombatantFromMonster(monster, q);
+      })
+      .catch(function() {
+        // fail silently if offline / CORS
+      });
+  }
+
+  function rollFromExpression(expr) {
+    // Supports patterns like "2d6", "8d10+16", "15d8-10"
+    if (typeof expr !== 'string') return 0;
+    var m = expr.trim().match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!m) return 0;
+    var count = parseInt(m[1], 10);
+    var sides = parseInt(m[2], 10);
+    var bonus = m[3] ? parseInt(m[3], 10) : 0;
+    if (!isFinite(count) || !isFinite(sides) || count <= 0 || sides <= 0) return 0;
+    var total = 0;
+    for (var i = 0; i < count; i++) {
+      total += 1 + Math.floor(Math.random() * sides);
+    }
+    total += bonus;
+    return total;
+  }
+
+  function renderMonsterList(filter) {
+    var listEl = document.getElementById('monster-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    var q = (filter || '').trim().toLowerCase();
+    var items = monsterIndex.slice();
+    items.sort(function(a, b) {
+      return a.name.localeCompare(b.name);
+    });
+    items.forEach(function(m) {
+      if (q && m.name.toLowerCase().indexOf(q) === -1 && m.index.toLowerCase().indexOf(q) === -1) {
+        return;
+      }
+      var li = document.createElement('li');
+      li.dataset.index = m.index;
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'name';
+      nameSpan.textContent = m.name;
+      var metaSpan = document.createElement('span');
+      metaSpan.className = 'meta';
+
+      var cached = srdMonsterCache[m.index];
+      if (cached && cached.challenge_rating != null) {
+        metaSpan.textContent = 'CR ' + cached.challenge_rating;
+      } else {
+        metaSpan.textContent = '';
+      }
+
+      li.appendChild(nameSpan);
+      li.appendChild(metaSpan);
+      li.addEventListener('click', function() {
+        addCombatantFromSrd(m.name);
+      });
+      listEl.appendChild(li);
+    });
+  }
+
+  function handleGestureAction(actionName) {
+    switch (actionName) {
+      case 'NEXT':
+        goToNextCombatant();
+        break;
+      case 'PREV':
+      case 'PREVIOUS':
+        goToPreviousCombatant();
+        break;
+      default:
+        break;
+    }
+  }
+
+  function loadMonsterIndex() {
+    fetch('https://www.dnd5eapi.co/api/monsters?limit=1000')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        monsterIndex = (data && data.results) ? data.results : [];
+        renderMonsterList('');
+      })
+      .catch(function() {
+        monsterIndex = [];
+      });
+  }
+
   function getActionForGesture(name) {
     if (DEFAULT_ACTIONS[name]) return DEFAULT_ACTIONS[name];
     return (name || '').toUpperCase();
@@ -567,14 +1928,12 @@
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
-      ctx.fillStyle = '#ECECEC';
-      ctx.fillRect(0, 0, w, h);
+      ctx.clearRect(0, 0, w, h);
     }
   }
   function clearCanvas() {
     resizeCanvas();
-    ctx.fillStyle = '#ECECEC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   // Ramer-Douglas-Peucker: simplify path by removing points that don't deviate much (reduces wobble)
@@ -718,7 +2077,22 @@
   function onPointerDown(e) {
     lastPointerType = e.pointerType || '—';
     updateDebug();
-    if (e.pointerType !== 'pen' && !(e.pointerType === 'mouse' && e.button === 0)) return;
+    // Only handle pen / stylus and (for desktop) right mouse button as gesture trigger.
+    // Left-click and normal taps should behave like regular UI interaction.
+    var t = e.target;
+    if (t && t.closest && (
+      t.closest('.panel') ||
+      t.closest('.panel-overlay') ||
+      t.closest('input, textarea, select, button') ||
+      t.closest('#monster-panel') ||
+      t.closest('#initiative-panel') ||
+      t.closest('#current-turn-panel')
+    )) {
+      // Let normal UI elements receive both pen and mouse events (for typing, clicking, etc.)
+      return;
+    }
+    // Pen = always gesture (unless above UI). Mouse = only right button (button === 2).
+    if (e.pointerType !== 'pen' && !(e.pointerType === 'mouse' && e.button === 2)) return;
     e.preventDefault();
     var rect = canvas.getBoundingClientRect();
     var x = e.clientX - rect.left;
@@ -726,8 +2100,7 @@
     strokePoints = [{ x: x, y: y }];
     isDrawing = true;
     if (clearTimeoutId) { clearTimeout(clearTimeoutId); clearTimeoutId = null; }
-    ctx.fillStyle = '#ECECEC';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
   function onPointerMove(e) {
     if ((e.pointerType !== 'pen' && e.pointerType !== 'mouse') || !isDrawing) return;
@@ -782,9 +2155,12 @@
     if (score > 0.75) {
       clearCanvas();
       drawTrailCrisp(strokePoints);
-      showFeedback(getActionForGesture(name), '#007AFF', false);
+      var actionName = getActionForGesture(name);
+      handleGestureAction(actionName);
+      showFeedback(actionName, '#007AFF', false);
     } else if (score >= 0.5 && score <= 0.75) {
-      showFeedback(getActionForGesture(name), '#B85C00', true);
+      var maybeAction = getActionForGesture(name);
+      showFeedback(maybeAction, '#B85C00', true);
     } else {
       showNoMatchFlash();
     }
@@ -792,10 +2168,17 @@
     clearTimeoutId = setTimeout(clearCanvas, 800);
   }
 
-  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
-  canvas.addEventListener('pointermove', onPointerMove, { passive: false });
-  canvas.addEventListener('pointerup', onPointerUp, { passive: false });
-  canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+  // Listen at the window level so gestures work over all UI layers
+  window.addEventListener('pointerdown', onPointerDown, { passive: false });
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup', onPointerUp, { passive: false });
+  window.addEventListener('pointercancel', onPointerUp, { passive: false });
+  // Prevent default context menu when using right-click as a gesture trigger
+  window.addEventListener('contextmenu', function(e) {
+    if (e.pointerType === 'mouse') {
+      e.preventDefault();
+    }
+  });
 
   document.getElementById('btn-record').addEventListener('click', function() {
     recordMode = true;
@@ -846,6 +2229,139 @@
     document.getElementById('library-panel').classList.remove('visible');
     document.getElementById('library-overlay').classList.remove('visible');
   });
+
+  // Tracker panel wiring
+  (function initTrackerUI() {
+    var btnTracker = document.getElementById('btn-tracker');
+    var trackerPanel = document.getElementById('tracker-panel');
+    var trackerOverlay = document.getElementById('tracker-overlay');
+    var addBtn = document.getElementById('tracker-add');
+    var clearBtn = document.getElementById('tracker-clear');
+    var srdBtn = document.getElementById('tracker-srd-add');
+    var srdInput = document.getElementById('tracker-srd-query');
+    if (!btnTracker || !trackerPanel || !trackerOverlay) return;
+
+    btnTracker.addEventListener('click', function() {
+      trackerPanel.classList.add('visible');
+      trackerOverlay.classList.add('visible');
+    });
+    trackerOverlay.addEventListener('click', function() {
+      trackerPanel.classList.remove('visible');
+      trackerOverlay.classList.remove('visible');
+    });
+    if (addBtn) {
+      addBtn.addEventListener('click', function() {
+        addCombatantFromInputs();
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function() {
+        clearCombatants();
+      });
+    }
+    if (srdBtn && srdInput) {
+      srdBtn.addEventListener('click', function() {
+        var q = srdInput.value.trim();
+        if (!q) return;
+        addCombatantFromSrd(q);
+      });
+      srdInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var q = srdInput.value.trim();
+          if (!q) return;
+          addCombatantFromSrd(q);
+        }
+      });
+    }
+
+    var rollBtn = document.getElementById('roll-initiative-btn');
+    var clearInitBtn = document.getElementById('clear-initiative-btn');
+    if (rollBtn) {
+      rollBtn.addEventListener('click', function() {
+        rollInitiativeForAll();
+      });
+    }
+    if (clearInitBtn) {
+      clearInitBtn.addEventListener('click', function() {
+        clearCombatants();
+      });
+    }
+  })();
+
+  // Monster panel wiring (top-left)
+  (function initMonsterPanelUI() {
+    var filterEl = document.getElementById('monster-filter');
+    var manualBtn = document.getElementById('monster-manual-add');
+    var rollHpToggle = document.getElementById('monster-roll-hp-toggle');
+    if (filterEl) {
+      filterEl.addEventListener('input', function() {
+        renderMonsterList(filterEl.value);
+      });
+    }
+    if (manualBtn) {
+      manualBtn.addEventListener('click', function() {
+        addManualCombatantFromMonsterPanel();
+      });
+    }
+    if (rollHpToggle) {
+      rollHpToggle.addEventListener('change', function() {
+        useRolledHp = !!rollHpToggle.checked;
+      });
+    }
+    loadMonsterIndex();
+  })();
+
+  // Gesture menu wiring (centralized controls)
+  (function initGestureMenuUI() {
+    var btnMenu = document.getElementById('btn-gesture-menu');
+    var overlay = document.getElementById('gesture-menu-overlay');
+    var panel = document.getElementById('gesture-menu-panel');
+    var btnRecord = document.getElementById('gesture-menu-record');
+    var btnLibrary = document.getElementById('gesture-menu-library');
+    var btnToggleDebug = document.getElementById('gesture-menu-toggle-debug');
+    var legacyRecord = document.getElementById('btn-record');
+    var legacyGestures = document.getElementById('btn-gestures');
+
+    if (!btnMenu || !overlay || !panel) return;
+
+    function closeMenu() {
+      panel.classList.remove('visible');
+      overlay.classList.remove('visible');
+    }
+
+    btnMenu.addEventListener('click', function() {
+      panel.classList.add('visible');
+      overlay.classList.add('visible');
+    });
+
+    overlay.addEventListener('click', function() {
+      closeMenu();
+    });
+
+    if (btnRecord && legacyRecord) {
+      btnRecord.addEventListener('click', function() {
+        // Delegate to existing record button behavior
+        legacyRecord.click();
+        closeMenu();
+      });
+    }
+
+    if (btnLibrary && legacyGestures) {
+      btnLibrary.addEventListener('click', function() {
+        // Delegate to existing gestures button behavior
+        legacyGestures.click();
+        closeMenu();
+      });
+    }
+
+    if (btnToggleDebug) {
+      btnToggleDebug.addEventListener('click', function() {
+        var dbg = document.getElementById('debug-panel');
+        if (dbg) dbg.classList.toggle('visible');
+      });
+    }
+  })();
 
   document.getElementById('debug-toggle').addEventListener('click', function() {
     document.getElementById('debug-panel').classList.toggle('visible');
