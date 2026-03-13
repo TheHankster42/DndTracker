@@ -444,6 +444,7 @@
       left: 16px;
       width: min(240px, 26vw);
       height: 60vh;
+      min-height: 480px;
       background: rgba(246, 246, 246, 0.96);
       backdrop-filter: saturate(180%) blur(24px);
       -webkit-backdrop-filter: saturate(180%) blur(24px);
@@ -479,7 +480,7 @@
     }
     #monster-list-wrap {
       flex: 1 1 auto;
-      min-height: 80px;
+      min-height: 200px;
       max-height: 50vh;
       overflow-y: auto;
       border-radius: 10px;
@@ -512,6 +513,7 @@
       margin-left: 4px;
     }
     #monster-manual {
+      flex-shrink: 0;
       border-top: 1px solid rgba(0, 0, 0, 0.06);
       padding-top: 4px;
       margin-top: 2px;
@@ -887,6 +889,7 @@
         <input type="text" id="encounter-name-input" placeholder="Encounter name" />
         <button type="button" id="save-encounter-btn" class="secondary" style="font-size:0.75rem;">Save</button>
         <button type="button" id="load-encounter-btn" class="secondary" style="font-size:0.75rem;">Load</button>
+        <button type="button" id="parties-btn" class="secondary" style="font-size:0.75rem;">Parties</button>
         <button type="button" id="roll-initiative-btn">Roll initiative</button>
         <button type="button" id="clear-initiative-btn">Clear all</button>
         <span>Arrow gesture ➜ next turn</span>
@@ -969,6 +972,29 @@
       No encounters saved yet.
     </div>
     <ul id="encounter-list" class="gesture-list"></ul>
+  </div>
+
+  <div id="parties-overlay" class="panel-overlay"></div>
+  <div id="parties-panel" class="panel">
+    <div id="parties-list-view">
+      <h3>Parties</h3>
+      <p style="margin:0 0 8px 0; font-size:0.8rem; color:#555;">
+        Add a saved party to initiative (name, init, AC only — no HP).
+      </p>
+      <button type="button" class="primary" id="parties-new-btn" style="margin-bottom:12px;">New party</button>
+      <div id="parties-list-empty" style="font-size:0.8rem; color:#888; display:none;">No parties saved yet.</div>
+      <ul id="parties-list" class="gesture-list"></ul>
+    </div>
+    <div id="parties-edit-view" style="display:none;">
+      <h3 id="parties-edit-title">Edit party</h3>
+      <input type="text" id="parties-edit-name" placeholder="Party name" style="margin-bottom:12px;" />
+      <div id="parties-members-list"></div>
+      <button type="button" class="secondary" id="parties-add-member-btn" style="margin-top:8px; margin-bottom:12px;">Add member</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="primary" id="parties-save-btn">Save party</button>
+        <button type="button" class="secondary" id="parties-cancel-btn">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <div id="tracker-overlay" class="panel-overlay"></div>
@@ -1339,9 +1365,9 @@
         var right = document.createElement('div');
         var hpSpan = document.createElement('span');
         hpSpan.className = 'hp';
-        hpSpan.textContent = 'HP ' + c.hp +
-          (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
-          '/' + c.maxHp;
+        hpSpan.textContent = (c.maxHp > 0)
+          ? ('HP ' + c.hp + (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') + '/' + c.maxHp)
+          : '—';
         right.appendChild(hpSpan);
 
         li.appendChild(left);
@@ -1354,7 +1380,7 @@
       if (tableBody) {
         tr = document.createElement('tr');
         if (idx === activeCombatantIndex) tr.classList.add('active');
-        if (c.hp <= 0) tr.classList.add('dead');
+        if (c.maxHp > 0 && c.hp <= 0) tr.classList.add('dead');
 
         var tdOrder = document.createElement('td');
         tdOrder.textContent = (idx + 1).toString();
@@ -1366,7 +1392,7 @@
         nameTextSpan.textContent = c.name || '—';
         var nameDeathSpan = document.createElement('span');
         nameDeathSpan.className = 'name-death';
-        nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
+        nameDeathSpan.textContent = (c.maxHp > 0 && c.hp <= 0 ? '☠' : '');
         tdName.appendChild(nameTextSpan);
         tdName.appendChild(nameDeathSpan);
 
@@ -1378,17 +1404,22 @@
 
         var tdHp = document.createElement('td');
         tdHp.className = 'hp-cell';
-        var hpEditorHtml =
-          '<div class="hp-editor">' +
-            '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
-            '<input type="range" class="hp-slider hp-temp" min="0" max="999" value="' + (Math.min(999, c.tempHp || 0)) + '">' +
-            '<div class="hp-meta">' +
-              'HP ' + c.hp +
-              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
-              '/' + c.maxHp +
-            '</div>' +
-          '</div>';
-        tdHp.innerHTML = hpEditorHtml;
+        var noHpTracking = (c.maxHp == null || c.maxHp <= 0);
+        if (noHpTracking) {
+          tdHp.textContent = '—';
+        } else {
+          var hpEditorHtml =
+            '<div class="hp-editor">' +
+              '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
+              '<input type="range" class="hp-slider hp-temp" min="0" max="999" value="' + (Math.min(999, c.tempHp || 0)) + '">' +
+              '<div class="hp-meta">' +
+                'HP ' + c.hp +
+                (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+                '/' + c.maxHp +
+              '</div>' +
+            '</div>';
+          tdHp.innerHTML = hpEditorHtml;
+        }
 
         var tdControls = document.createElement('td');
         tdControls.className = 'controls-cell';
@@ -1968,9 +1999,298 @@
     }
   }
 
-  // Expose selected functions for inline onclick handlers
+  var editingPartyId = null; // null = new party, uuid = edit existing
+
+  async function openPartiesMenu() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot open parties.');
+      return;
+    }
+    var overlay = document.getElementById('parties-overlay');
+    var panel = document.getElementById('parties-panel');
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    if (!overlay || !panel || !listView || !editView) return;
+    listView.style.display = '';
+    editView.style.display = 'none';
+    overlay.classList.add('visible');
+    panel.classList.add('visible');
+    await renderPartiesList();
+  }
+
+  async function renderPartiesList() {
+    var listEl = document.getElementById('parties-list');
+    var emptyEl = document.getElementById('parties-list-empty');
+    if (!listEl || !emptyEl) return;
+    listEl.innerHTML = '';
+    try {
+      var res = await supabaseClient
+        .from('parties')
+        .select('id,name,created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (res.error) throw res.error;
+      var rows = res.data || [];
+      emptyEl.style.display = rows.length ? 'none' : 'block';
+      rows.forEach(function(p) {
+        var li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.flexWrap = 'wrap';
+        li.style.alignItems = 'center';
+        li.style.gap = '8px';
+        li.style.marginBottom = '8px';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = p.name || 'Unnamed party';
+        nameSpan.style.flex = '1';
+        nameSpan.style.minWidth = '0';
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'primary';
+        addBtn.style.fontSize = '0.75rem';
+        addBtn.style.padding = '6px 10px';
+        addBtn.textContent = 'Add to initiative';
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'secondary';
+        editBtn.style.fontSize = '0.75rem';
+        editBtn.style.padding = '6px 10px';
+        editBtn.textContent = 'Edit';
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'delete-btn';
+        delBtn.textContent = 'Delete';
+        addBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          addPartyToInitiative(p.id);
+        });
+        editBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          openEditParty(p.id);
+        });
+        delBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          deleteParty(p.id, li);
+        });
+        li.appendChild(nameSpan);
+        li.appendChild(addBtn);
+        li.appendChild(editBtn);
+        li.appendChild(delBtn);
+        listEl.appendChild(li);
+      });
+    } catch (err) {
+      console.error('Failed to load parties', err);
+    }
+  }
+
+  async function addPartyToInitiative(partyId) {
+    if (!supabaseClient) return;
+    try {
+      var res = await supabaseClient
+        .from('party_members')
+        .select('name,init_bonus,ac')
+        .eq('party_id', partyId)
+        .order('order_index', { ascending: true });
+      if (res.error) throw res.error;
+      var members = res.data || [];
+      if (!members.length) return;
+      members.forEach(function(m) {
+        var initBonus = typeof m.init_bonus === 'number' ? m.init_bonus : 0;
+        var initRoll = rollD20();
+        var init = initRoll + initBonus;
+        var ac = (m.ac != null ? m.ac : null);
+        combatants.push(Object.assign({
+          name: m.name || '—',
+          init: init,
+          hp: 0,
+          maxHp: 0,
+          ac: ac,
+          dexMod: initBonus,
+          srd: null
+        }, createEmptyStateForCombatant()));
+      });
+      sortCombatants();
+      if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+      renderCombatants();
+      renderCurrentTurnPanel();
+      var overlay = document.getElementById('parties-overlay');
+      var panel = document.getElementById('parties-panel');
+      if (overlay) overlay.classList.remove('visible');
+      if (panel) panel.classList.remove('visible');
+    } catch (err) {
+      console.error('Failed to add party to initiative', err);
+    }
+  }
+
+  async function deleteParty(partyId, listItemEl) {
+    if (!supabaseClient) return;
+    try {
+      var res = await supabaseClient.from('parties').delete().eq('id', partyId);
+      if (res.error) throw res.error;
+      if (listItemEl && listItemEl.parentNode) listItemEl.remove();
+      var listEl = document.getElementById('parties-list');
+      if (listEl && !listEl.children.length) {
+        var emptyEl = document.getElementById('parties-list-empty');
+        if (emptyEl) emptyEl.style.display = 'block';
+      }
+    } catch (err) {
+      console.error('Failed to delete party', err);
+    }
+  }
+
+  async function openEditParty(partyId) {
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    var titleEl = document.getElementById('parties-edit-title');
+    var nameEl = document.getElementById('parties-edit-name');
+    var membersEl = document.getElementById('parties-members-list');
+    if (!listView || !editView || !titleEl || !nameEl || !membersEl) return;
+    editingPartyId = partyId;
+    titleEl.textContent = partyId ? 'Edit party' : 'New party';
+    nameEl.value = '';
+    membersEl.innerHTML = '';
+    if (partyId && supabaseClient) {
+      try {
+        var pRes = await supabaseClient.from('parties').select('name').eq('id', partyId).single();
+        if (!pRes.error && pRes.data) nameEl.value = pRes.data.name || '';
+        var mRes = await supabaseClient
+          .from('party_members')
+          .select('name,init_bonus,ac')
+          .eq('party_id', partyId)
+          .order('order_index', { ascending: true });
+        if (!mRes.error && mRes.data && mRes.data.length) {
+          mRes.data.forEach(function(m) {
+            appendPartyMemberRow(membersEl, m.name, m.init_bonus, m.ac);
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!membersEl.children.length) appendPartyMemberRow(membersEl, '', 0, null);
+    listView.style.display = 'none';
+    editView.style.display = 'block';
+  }
+
+  function appendPartyMemberRow(container, name, initBonus, ac) {
+    var row = document.createElement('div');
+    row.className = 'party-member-row';
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    row.style.marginBottom = '6px';
+    row.style.alignItems = 'center';
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Name';
+    nameInput.value = name || '';
+    nameInput.style.flex = '1';
+    nameInput.style.minWidth = '0';
+    nameInput.style.padding = '6px 8px';
+    nameInput.style.fontSize = '0.9rem';
+    var initInput = document.createElement('input');
+    initInput.type = 'number';
+    initInput.placeholder = 'Init';
+    initInput.value = (initBonus != null ? initBonus : '');
+    initInput.style.width = '56px';
+    initInput.style.padding = '6px 6px';
+    initInput.style.fontSize = '0.9rem';
+    var acInput = document.createElement('input');
+    acInput.type = 'number';
+    acInput.placeholder = 'AC';
+    acInput.value = (ac != null && ac !== '' ? ac : '');
+    acInput.style.width = '48px';
+    acInput.style.padding = '6px 6px';
+    acInput.style.fontSize = '0.9rem';
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'secondary';
+    removeBtn.style.padding = '6px 10px';
+    removeBtn.style.flexShrink = '0';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', function() {
+      if (container.children.length > 1) row.remove();
+    });
+    row.appendChild(nameInput);
+    row.appendChild(initInput);
+    row.appendChild(acInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  }
+
+  async function savePartyFromEdit() {
+    var nameEl = document.getElementById('parties-edit-name');
+    var membersEl = document.getElementById('parties-members-list');
+    if (!nameEl || !membersEl) return;
+    var partyName = (nameEl.value || '').trim() || 'Unnamed party';
+    var rows = [];
+    var memberRows = membersEl.querySelectorAll('.party-member-row');
+    for (var i = 0; i < memberRows.length; i++) {
+      var r = memberRows[i];
+      var inputs = r.querySelectorAll('input');
+      var nameInput = inputs[0];
+      var initInput = inputs[1];
+      var acInput = inputs[2];
+      var name = (nameInput && nameInput.value ? nameInput.value.trim() : '') || null;
+      if (!name) continue;
+      var initBonus = parseInt(initInput && initInput.value ? initInput.value : 0, 10);
+      if (isNaN(initBonus)) initBonus = 0;
+      var ac = (acInput && acInput.value && acInput.value.trim() !== '') ? parseInt(acInput.value, 10) : null;
+      if (ac !== null && isNaN(ac)) ac = null;
+      rows.push({ name: name, init_bonus: initBonus, ac: ac, order_index: i });
+    }
+    if (!rows.length) {
+      alert('Add at least one member with a name.');
+      return;
+    }
+    if (!supabaseClient) {
+      console.warn('Supabase not available');
+      return;
+    }
+    try {
+      var pid;
+      if (editingPartyId) {
+        await supabaseClient.from('parties').update({ name: partyName }).eq('id', editingPartyId);
+        await supabaseClient.from('party_members').delete().eq('party_id', editingPartyId);
+        pid = editingPartyId;
+      } else {
+        var pRes = await supabaseClient.from('parties').insert({ name: partyName }).select('id').single();
+        if (pRes.error) throw pRes.error;
+        pid = pRes.data.id;
+      }
+      var memberRowsToInsert = rows.map(function(r, i) {
+        return { party_id: pid, name: r.name, init_bonus: r.init_bonus, ac: r.ac, order_index: i };
+      });
+      var mRes = await supabaseClient.from('party_members').insert(memberRowsToInsert);
+      if (mRes.error) throw mRes.error;
+      var listView = document.getElementById('parties-list-view');
+      var editView = document.getElementById('parties-edit-view');
+      if (listView) listView.style.display = '';
+      if (editView) editView.style.display = 'none';
+      editingPartyId = null;
+      await renderPartiesList();
+    } catch (err) {
+      console.error('Failed to save party', err);
+      var msg = (err && (err.message || err.hint)) ? (err.message || '') + (err.hint ? ' ' + err.hint : '') : String(err);
+      alert('Failed to save party. ' + (msg ? msg : 'Check console.'));
+    }
+  }
+
+  function cancelPartyEdit() {
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    if (listView) listView.style.display = '';
+    if (editView) editView.style.display = 'none';
+    editingPartyId = null;
+  }
+
+  // Expose selected functions for inline onclick handlers and parties panel
   window.saveCurrentEncounter = saveCurrentEncounter;
   window.openEncounterMenu = openEncounterMenu;
+  window.openPartiesMenu = openPartiesMenu;
+  window.openEditParty = openEditParty;
+  window.appendPartyMemberRow = appendPartyMemberRow;
+  window.savePartyFromEdit = savePartyFromEdit;
+  window.cancelPartyEdit = cancelPartyEdit;
 
   // Use a stronger RNG for d20 rolls when available so streaks are less likely
   function rollD20() {
@@ -2698,6 +3018,12 @@
         openEncounterMenu();
       });
     }
+    var partiesBtn = document.getElementById('parties-btn');
+    if (partiesBtn) {
+      partiesBtn.addEventListener('click', function() {
+        openPartiesMenu();
+      });
+    }
   })();
 
   // Monster panel wiring (top-left)
@@ -2770,6 +3096,43 @@
       btnToggleDebug.addEventListener('click', function() {
         var dbg = document.getElementById('debug-panel');
         if (dbg) dbg.classList.toggle('visible');
+      });
+    }
+  })();
+
+  // Parties panel wiring
+  (function initPartiesPanelUI() {
+    var overlay = document.getElementById('parties-overlay');
+    var panel = document.getElementById('parties-panel');
+    var newBtn = document.getElementById('parties-new-btn');
+    var saveBtn = document.getElementById('parties-save-btn');
+    var cancelBtn = document.getElementById('parties-cancel-btn');
+    var addMemberBtn = document.getElementById('parties-add-member-btn');
+    if (overlay && panel) {
+      overlay.addEventListener('click', function() {
+        panel.classList.remove('visible');
+        overlay.classList.remove('visible');
+      });
+    }
+    if (newBtn) {
+      newBtn.addEventListener('click', function() {
+        window.openEditParty(null);
+      });
+    }
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        window.savePartyFromEdit();
+      });
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function() {
+        window.cancelPartyEdit();
+      });
+    }
+    if (addMemberBtn) {
+      addMemberBtn.addEventListener('click', function() {
+        var membersEl = document.getElementById('parties-members-list');
+        if (membersEl && window.appendPartyMemberRow) window.appendPartyMemberRow(membersEl, '', 0, null);
       });
     }
   })();
