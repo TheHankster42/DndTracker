@@ -323,6 +323,28 @@
     .hp-editor .hp-temp::-moz-range-thumb {
       background: #FF9F0A;
     }
+    /* Make HP sliders easier to grab on touch devices (iPad, etc.) */
+    @media (pointer: coarse) {
+      .hp-editor .hp-slider {
+        height: 8px;
+      }
+      .hp-editor .hp-main::-webkit-slider-runnable-track,
+      .hp-editor .hp-main::-moz-range-track {
+        height: 6px;
+      }
+      .hp-editor .hp-temp::-webkit-slider-runnable-track,
+      .hp-editor .hp-temp::-moz-range-track {
+        height: 6px;
+      }
+      .hp-editor .hp-slider::-webkit-slider-thumb {
+        width: 18px;
+        height: 18px;
+      }
+      .hp-editor .hp-slider::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+      }
+    }
     .hp-editor .hp-meta {
       font-size: 0.65rem;
       line-height: 1.1;
@@ -1588,9 +1610,11 @@
     if (isNaN(initBonus)) initBonus = 0;
     if (isNaN(hp)) hp = 10;
     if (isNaN(ac)) ac = 10;
+    // Auto-roll initiative on add: 1d20 + initBonus
+    var initRoll = rollD20();
     combatants.push(Object.assign({
       name: name,
-      init: 10 + initBonus,
+      init: initRoll + initBonus,
       hp: hp,
       maxHp: hp,
       ac: ac,
@@ -1637,12 +1661,22 @@
       } else {
         mod = 0;
       }
-      var roll = Math.floor(Math.random() * 20) + 1;
+      var roll = rollD20();
       c.init = roll + mod;
     });
     sortCombatants();
     activeCombatantIndex = 0;
     renderCombatants();
+  }
+
+  // Use a stronger RNG for d20 rolls when available so streaks are less likely
+  function rollD20() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      var arr = new Uint32Array(1);
+      window.crypto.getRandomValues(arr);
+      return (arr[0] % 20) + 1;
+    }
+    return Math.floor(Math.random() * 20) + 1;
   }
 
   function renderCurrentTurnPanel() {
@@ -1839,7 +1873,9 @@
       ? monster.dexterity
       : 10;
     var dexMod = Math.floor((dexScore - 10) / 2);
-    var init = 10 + dexMod;
+    // Auto-roll initiative on add: 1d20 + Dex mod
+    var initRoll = rollD20();
+    var init = initRoll + dexMod;
     combatants.push(Object.assign({
       name: name,
       init: init,
