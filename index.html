@@ -206,6 +206,7 @@
       text-align: left;
       border-bottom: 1px solid rgba(0, 0, 0, 0.06);
       white-space: nowrap;
+      vertical-align: middle; /* align all text to a common center line */
     }
     table.initiative-table th {
       font-weight: 600;
@@ -219,17 +220,15 @@
       background: rgba(0, 0, 0, 0.18);
     }
     table.initiative-table td.name-cell {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      line-height: 1.2;
+      /* normal table-cell layout so borders/lines stay continuous */
     }
     .name-cell .name-text {
-      flex: 1;
-      min-width: 0;
+      /* inline by default */
     }
     .name-cell .name-death {
-      width: 16px;
+      display: inline-block;
+      margin-left: 4px;
+      width: 12px;
       text-align: center;
       color: #FF3B30;
       font-size: 0.8rem;
@@ -393,8 +392,8 @@
       position: fixed;
       top: 10vh;
       left: 16px;
-      width: min(280px, 32vw);
-      max-height: 70vh;
+      width: min(240px, 26vw);
+      height: 60vh;
       background: rgba(246, 246, 246, 0.96);
       backdrop-filter: saturate(180%) blur(24px);
       -webkit-backdrop-filter: saturate(180%) blur(24px);
@@ -2436,6 +2435,10 @@
     var nextZ = 50; // base above initial CSS z-indexes
 
     function onPointerDown(e, panel, handle) {
+      // Ignore drags that originate on the lock button itself
+      if (e.target && e.target.closest && e.target.closest('.panel-lock-btn')) {
+        return;
+      }
       if (panel.getAttribute('data-locked') === 'true') return;
       // Only left mouse or primary pointer
       if (e.pointerType === 'mouse' && e.button !== 0) return;
