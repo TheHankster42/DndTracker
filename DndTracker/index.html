@@ -1,0 +1,3324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="D&D Tracker" />
+  <title>Gesture Shortcuts</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      background: #ECECEC;
+      color: #1D1D1F;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      touch-action: none;
+      z-index: 200; /* above all DnD UI so strokes float on top */
+      pointer-events: none; /* container never blocks clicks */
+    }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      border: 3px solid transparent;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+      background: transparent;
+      pointer-events: none; /* let ALL mouse clicks/taps hit underlying DnD UI */
+    }
+    #canvas.record-mode {
+      border-color: #FF9F0A;
+      box-shadow: 0 0 0 1px rgba(255, 159, 10, 0.4), 0 0 20px rgba(255, 159, 10, 0.15);
+    }
+    #canvas.no-match-flash {
+      border-color: #FF3B30;
+      animation: borderFlash 0.4s ease-out;
+    }
+    @keyframes borderFlash {
+      to { border-color: transparent; }
+    }
+    .record-label {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      color: #C93400;
+      font-size: 1.125rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      z-index: 210;
+      text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+    }
+    .record-label.visible {
+      opacity: 1;
+    }
+    #feedback-label {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      font-size: 2.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      z-index: 210;
+      opacity: 0;
+      transition: opacity 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+    #feedback-label.visible {
+      opacity: 1;
+    }
+    #feedback-label.fade-out {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .btn-float {
+      position: fixed;
+      bottom: 28px;
+      padding: 11px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: #fff;
+      background: #007AFF;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+      touch-action: manipulation;
+      cursor: pointer;
+      z-index: 220; /* gesture / control buttons above everything */
+      transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .btn-float:hover {
+      background: #0051D5;
+      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.35), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    }
+    .btn-float:active {
+      transform: scale(0.98);
+      background: #004EC4;
+    }
+    #btn-record,
+    #btn-gestures {
+      display: none;
+    }
+    #btn-gesture-menu {
+      right: 24px;
+      bottom: 84px;
+    }
+    #btn-tracker {
+      display: none;
+    }
+    #initiative-panel {
+      position: fixed;
+      top: 10vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(900px, 90vw);
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.94);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 14px 14px 16px;
+      z-index: 35;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+      cursor: default;
+    }
+    #initiative-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      cursor: move;
+      user-select: none;
+    }
+    #initiative-panel-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      flex: 1;
+    }
+    #initiative-panel-subtitle {
+      margin-top: 4px;
+      font-size: 0.78rem;
+      color: #6e6e73;
+    }
+    #initiative-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #6e6e73;
+    }
+    #save-encounter-btn {
+      width: 64px; /* fixed so Save / Saving… / Saved / Error don't resize */
+      min-width: 64px;
+      box-sizing: border-box;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    #save-encounter-btn.save-working {
+      opacity: 0.8;
+    }
+    #save-encounter-btn.save-success {
+      background: #34C759 !important;
+      color: #fff !important;
+      border-color: #34C759 !important;
+    }
+    #save-encounter-btn.save-error {
+      background: #FF3B30 !important;
+      color: #fff !important;
+      border-color: #FF3B30 !important;
+    }
+    #encounter-name-input {
+      min-width: 140px;
+      max-width: 200px;
+      padding: 4px 8px;
+      font-size: 0.78rem;
+      border-radius: 999px;
+      border: 1px solid #D1D1D6;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #roll-initiative-btn {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    #roll-initiative-btn:active {
+      transform: scale(0.97);
+    }
+    #initiative-table-wrap {
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.8);
+    }
+    table.initiative-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    table.initiative-table thead {
+      background: rgba(242, 242, 247, 0.9);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    table.initiative-table th,
+    table.initiative-table td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      white-space: nowrap;
+      vertical-align: middle; /* align all text to a common center line */
+    }
+    table.initiative-table th {
+      font-weight: 600;
+      color: #3a3a3c;
+    }
+    table.initiative-table tbody tr.active {
+      background: rgba(0, 122, 255, 0.14);
+    }
+    table.initiative-table tbody tr.dead {
+      opacity: 0.38;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    table.initiative-table td.name-cell {
+      /* normal table-cell layout so borders/lines stay continuous */
+    }
+    .name-cell .name-text {
+      /* inline by default */
+    }
+    .name-cell .name-death {
+      display: inline-block;
+      margin-left: 4px;
+      width: 12px;
+      text-align: center;
+      color: #FF3B30;
+      font-size: 0.8rem;
+    }
+    table.initiative-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    table.initiative-table td.hp-cell {
+      font-weight: 500;
+      vertical-align: top;
+      min-width: 110px;
+    }
+    .hp-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .hp-editor .hp-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hp-editor .hp-slider {
+      flex: 1;
+      min-width: 0;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 24px;
+      border-radius: 999px;
+      background: transparent;
+      outline: none;
+      padding: 0;
+      margin: 0;
+    }
+    .hp-editor .hp-main {
+      background: transparent;
+    }
+    /* Thumb: short vertical line that hangs over the bar */
+    .hp-editor .hp-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 6px;
+      height: 22px;
+      border-radius: 2px;
+      background: #1D1D1F;
+      cursor: grab;
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      margin-top: -6px; /* center 22px thumb over 10px track */
+    }
+    .hp-editor .hp-slider::-webkit-slider-thumb:active {
+      cursor: grabbing;
+    }
+    .hp-editor .hp-slider::-webkit-slider-runnable-track {
+      height: 10px;
+    }
+    /* HP bar: colour shifts from green (healthy) to red (low) over grey track */
+    .hp-editor .hp-main::-webkit-slider-runnable-track {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--hp-color, #34C759) 0%,
+        var(--hp-color, #34C759) var(--hp-fill, 0%),
+        #E5E5EA var(--hp-fill, 0%),
+        #E5E5EA 100%
+      );
+    }
+    .hp-editor .hp-main::-moz-range-track {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--hp-color, #34C759) 0%,
+        var(--hp-color, #34C759) var(--hp-fill, 0%),
+        #E5E5EA var(--hp-fill, 0%),
+        #E5E5EA 100%
+      );
+    }
+    .hp-editor .hp-slider::-moz-range-thumb {
+      width: 6px;
+      height: 22px;
+      border-radius: 2px;
+      background: #1D1D1F;
+      cursor: grab;
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    /* Current HP number input (next to slider for precise adjustment) */
+    .hp-editor .hp-current-input {
+      width: 44px;
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #D1D1D6;
+      text-align: center;
+      background: #fff;
+    }
+    .hp-editor .hp-current-input:focus {
+      outline: none;
+      border-color: #007AFF;
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25);
+    }
+    /* Hide the increment/decrement spinner on number inputs */
+    .hp-editor input[type="number"]::-webkit-inner-spin-button,
+    .hp-editor input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .hp-editor input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    /* Temp HP row: label + number input (different from main HP) */
+    .hp-editor .hp-temp-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: #6e6e73;
+    }
+    .hp-editor .hp-temp-row label {
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .hp-editor .hp-temp-input {
+      width: 48px;
+      font-size: 0.8rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid #FF9F0A;
+      background: rgba(255, 159, 10, 0.08);
+      text-align: center;
+      color: #1D1D1F;
+    }
+    .hp-editor .hp-temp-input::placeholder {
+      color: #8E8E93;
+    }
+    .hp-editor .hp-temp-input:focus {
+      outline: none;
+      border-color: #E68600;
+      box-shadow: 0 0 0 2px rgba(255, 159, 10, 0.3);
+    }
+    .hp-editor .hp-meta {
+      font-size: 0.65rem;
+      line-height: 1.1;
+      color: #6e6e73;
+    }
+    .temp-input {
+      width: 40px;
+      font-size: 0.7rem;
+      padding: 1px 2px;
+      border-radius: 4px;
+      border: 1px solid #D1D1D6;
+      text-align: center;
+    }
+    .controls-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+    }
+    .controls-main-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .controls-secondary-row {
+      display: block;
+      max-width: 180px;
+      text-align: right;
+      white-space: normal;
+      word-wrap: break-word;
+      line-height: 1.25;
+      font-size: 0.65rem;
+    }
+    table.initiative-table td.controls-cell button {
+      padding: 1px 6px;
+      font-size: 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      background: #f2f2f7;
+      cursor: pointer;
+    }
+    .controls-cell label {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .controls-cell select {
+      font-size: 0.7rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid #D1D1D6;
+      max-width: 120px;
+      background: #fff;
+    }
+    .controls-cell .remove-btn {
+      color: #FF3B30;
+      border-color: rgba(255, 59, 48, 0.5);
+      background: transparent;
+    }
+    .controls-cell .status-summary {
+      display: inline-block;
+      font-size: 0.65rem;
+      color: #555;
+    }
+    #monster-panel {
+      position: fixed;
+      top: 10vh;
+      left: 16px;
+      width: min(240px, 26vw);
+      height: 60vh;
+      min-height: 480px;
+      background: rgba(246, 246, 246, 0.96);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 10px 12px 12px;
+      z-index: 34;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+      cursor: default;
+    }
+    #monster-panel h3 {
+      margin: 0 0 4px 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: move;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    #monster-filter {
+      width: 100%;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #monster-list-wrap {
+      flex: 1 1 auto;
+      min-height: 200px;
+      max-height: 50vh;
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      background: rgba(255, 255, 255, 0.85);
+      margin-bottom: 6px;
+    }
+    #monster-list {
+      list-style: none;
+      margin: 0;
+      padding: 4px 0;
+      font-size: 0.78rem;
+    }
+    #monster-list li {
+      padding: 4px 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #monster-list li:hover {
+      background: rgba(0, 122, 255, 0.12);
+    }
+    #monster-list li span.name {
+      font-weight: 500;
+    }
+    #monster-list li span.meta {
+      font-size: 0.7rem;
+      color: #6e6e73;
+      margin-left: 4px;
+    }
+    #monster-manual {
+      flex-shrink: 0;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      padding-top: 4px;
+      margin-top: 2px;
+      font-size: 0.78rem;
+    }
+    #monster-manual input {
+      width: 100%;
+      margin-bottom: 4px;
+      padding: 5px 7px;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      font-size: 0.78rem;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    #monster-manual button {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #current-turn-panel {
+      position: fixed;
+      top: 10vh;
+      right: 16px;
+      width: min(340px, 40vw);
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.96);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      padding: 12px 14px 14px;
+      z-index: 36;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+      cursor: default;
+    }
+    #current-turn-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 8px;
+      cursor: move;
+      user-select: none;
+    }
+    #current-turn-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      flex: 1;
+    }
+    #current-turn-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 2px;
+    }
+    #current-turn-subtitle {
+      font-size: 0.75rem;
+      color: #6e6e73;
+      margin-bottom: 6px;
+    }
+    #current-turn-body {
+      overflow-y: auto;
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    #current-turn-body section {
+      margin-bottom: 8px;
+    }
+    #current-turn-body strong.label {
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      color: #6e6e73;
+      display: block;
+      margin-bottom: 2px;
+    }
+    #current-turn-body .abilities-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    #current-turn-body .abilities-row span {
+      flex: 1 1 0;
+      text-align: center;
+    }
+    #current-turn-body ul {
+      padding-left: 16px;
+      margin: 2px 0 0 0;
+    }
+    #current-turn-body li {
+      margin-bottom: 2px;
+    }
+    #debug-toggle {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 48px;
+      height: 48px;
+      z-index: 30;
+      touch-action: manipulation;
+    }
+    #debug-panel {
+      position: fixed;
+      top: 48px;
+      left: 12px;
+      right: 12px;
+      max-width: 320px;
+      background: rgba(30, 30, 30, 0.88);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      color: rgba(255, 255, 255, 0.9);
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 0.8125rem;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
+      z-index: 260; /* above gesture canvas */
+      display: none;
+      touch-action: manipulation;
+    }
+    #debug-panel.visible {
+      display: block;
+    }
+    #debug-panel p { margin: 6px 0; }
+    .panel-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 290; /* above gesture canvas, below floating buttons */
+      display: none;
+      touch-action: manipulation;
+      transition: opacity 0.3s ease;
+    }
+    .panel-overlay.visible {
+      display: block;
+    }
+    .panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 70vh;
+      background: rgba(246, 246, 246, 0.95);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06) inset;
+      padding: 28px 24px  calc(28px + env(safe-area-inset-bottom));
+      z-index: 300; /* above gesture canvas */
+      touch-action: manipulation;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .panel.visible {
+      transform: translateY(0);
+    }
+    .panel h3 {
+      margin: 0 0 20px 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #1D1D1F;
+    }
+    .panel input[type="text"] {
+      width: 100%;
+      padding: 11px 14px;
+      font-size: 1rem;
+      border: 1px solid #D1D1D6;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      background: rgba(255, 255, 255, 0.8);
+      color: #1D1D1F;
+      touch-action: manipulation;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .panel input[type="text"]::placeholder {
+      color: #8E8E93;
+    }
+    .panel input[type="text"]:focus {
+      outline: none;
+      border-color: #007AFF;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.25);
+    }
+    .panel button.primary {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 1rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: #fff;
+      background: #007AFF;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      touch-action: manipulation;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .panel button.primary:hover {
+      background: #0051D5;
+    }
+    .panel button.primary:active {
+      transform: scale(0.99);
+    }
+    .gesture-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 50vh;
+      overflow-y: auto;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .gesture-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      transition: background 0.15s ease;
+    }
+    .gesture-list li:last-child { border-bottom: none; }
+    .gesture-list li:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    .gesture-list .name { font-weight: 600; color: #1D1D1F; }
+    .gesture-list .action { color: #007AFF; font-size: 0.875rem; margin-left: 8px; font-weight: 500; }
+    .gesture-list .delete-btn {
+      padding: 6px 12px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #FF3B30;
+      background: transparent;
+      border: 1px solid rgba(255, 59, 48, 0.5);
+      border-radius: 6px;
+      touch-action: manipulation;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .gesture-list .delete-btn:hover {
+      background: rgba(255, 59, 48, 0.1);
+      border-color: #FF3B30;
+    }
+    .gesture-list .delete-btn.builtin { display: none; }
+    .tracker-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .tracker-controls input[type="text"],
+    .tracker-controls input[type="number"] {
+      flex: 1 1 120px;
+      min-width: 0;
+      padding: 9px 10px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      border: 1px solid #D1D1D6;
+      background: rgba(255, 255, 255, 0.9);
+    }
+    .tracker-controls button {
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      border: none;
+      background: #007AFF;
+      color: #fff;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .tracker-controls button.secondary {
+      background: #E5E5EA;
+      color: #1D1D1F;
+    }
+    .tracker-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 42vh;
+      overflow-y: auto;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    .tracker-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 0.9rem;
+    }
+    .tracker-list li:last-child {
+      border-bottom: none;
+    }
+    .tracker-list li.active {
+      background: rgba(0, 122, 255, 0.12);
+    }
+    .tracker-list .name {
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .tracker-list .meta {
+      font-size: 0.8rem;
+      color: #555;
+    }
+    .tracker-list .hp {
+      font-weight: 500;
+      margin-right: 6px;
+    }
+    .tracker-list .controls {
+      display: flex;
+      gap: 4px;
+      margin-left: 8px;
+    }
+    .tracker-list .controls button {
+      padding: 4px 6px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.15);
+      background: #F2F2F7;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="record-label" class="record-label">Draw your gesture now</div>
+    <div id="feedback-label"></div>
+  </div>
+  <div id="monster-panel" data-draggable="true" data-locked="false">
+    <h3>
+      <span>Monsters</span>
+      <button type="button" class="panel-lock-btn" data-panel-id="monster-panel" aria-label="Lock monsters panel">🔓</button>
+    </h3>
+    <input type="text" id="monster-filter" placeholder="Search SRD (goblin, dragon...)" />
+    <div style="margin:4px 0 6px 0; font-size:0.78rem; color:#555;">
+      <label style="display:flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="monster-roll-hp-toggle" />
+        <span>Roll HP from hit dice</span>
+      </label>
+    </div>
+    <div id="monster-list-wrap">
+      <ul id="monster-list"></ul>
+    </div>
+    <div id="monster-manual">
+      <div style="margin-bottom:2px; font-weight:500;">Add custom creature</div>
+      <input type="text" id="monster-manual-name" placeholder="Name" />
+      <input type="number" id="monster-manual-init" placeholder="Init bonus (Dex mod)" />
+      <input type="number" id="monster-manual-hp" placeholder="HP" />
+      <input type="number" id="monster-manual-ac" placeholder="AC" />
+      <button type="button" id="monster-manual-add">Add non-SRD</button>
+    </div>
+  </div>
+  <div id="initiative-panel" data-draggable="true" data-locked="false">
+    <div id="initiative-panel-header">
+      <h3>Initiative</h3>
+      <div id="initiative-panel-actions">
+        <button type="button" class="panel-lock-btn" data-panel-id="initiative-panel" aria-label="Lock initiative panel">🔓</button>
+        <input type="text" id="encounter-name-input" placeholder="Encounter name" />
+        <button type="button" id="save-encounter-btn" class="secondary" style="font-size:0.75rem;">Save</button>
+        <button type="button" id="load-encounter-btn" class="secondary" style="font-size:0.75rem;">Load</button>
+        <button type="button" id="parties-btn" class="secondary" style="font-size:0.75rem;">Parties</button>
+        <button type="button" id="roll-initiative-btn">Roll initiative</button>
+        <button type="button" id="clear-initiative-btn">Clear all</button>
+        <span>Arrow gesture ➜ next turn</span>
+      </div>
+    </div>
+    <div id="initiative-panel-subtitle">
+      Add creatures in the Tracker panel or from SRD, then roll or save encounters.
+    </div>
+    <div id="initiative-table-wrap">
+      <table class="initiative-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Init</th>
+            <th>AC</th>
+            <th>HP</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="initiative-table-body">
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="current-turn-panel" data-draggable="true" data-locked="false">
+    <div id="current-turn-header">
+      <h3>Current turn</h3>
+      <button type="button" class="panel-lock-btn" data-panel-id="current-turn-panel" aria-label="Lock current turn panel">🔓</button>
+      <span style="font-size:0.75rem;color:#6e6e73;" id="current-turn-order"></span>
+    </div>
+    <div id="current-turn-name"></div>
+    <div id="current-turn-subtitle"></div>
+    <div id="current-turn-body">
+      <!-- Filled from JS based on active combatant / SRD info -->
+    </div>
+  </div>
+  <button type="button" class="btn-float" id="btn-record">Record Gesture</button>
+  <button type="button" class="btn-float" id="btn-gestures">Gestures</button>
+  <button type="button" class="btn-float" id="btn-gesture-menu">Gesture menu</button>
+  <button type="button" class="btn-float" id="btn-tracker">Tracker</button>
+  <div id="debug-toggle" title="Toggle debug"></div>
+  <div id="debug-panel">
+    <p><strong>pointerType:</strong> <span id="debug-pointer">—</span></p>
+    <p><strong>Point count:</strong> <span id="debug-points">0</span></p>
+    <p><strong>Last result:</strong> <span id="debug-result">—</span></p>
+    <p><strong>Score:</strong> <span id="debug-score">—</span></p>
+    <p><strong>Recognition time:</strong> <span id="debug-time">—</span> ms</p>
+  </div>
+  <div id="record-overlay" class="panel-overlay"></div>
+  <div id="record-panel" class="panel">
+    <h3>Record new gesture</h3>
+    <input type="text" id="record-name" placeholder="Gesture name" />
+    <button type="button" class="primary" id="record-confirm">Confirm</button>
+  </div>
+  <div id="library-overlay" class="panel-overlay"></div>
+  <div id="library-panel" class="panel">
+    <h3>Gesture library</h3>
+    <ul id="gesture-list" class="gesture-list"></ul>
+  </div>
+
+  <div id="gesture-menu-overlay" class="panel-overlay"></div>
+  <div id="gesture-menu-panel" class="panel">
+    <h3>Gesture shortcuts</h3>
+    <p style="margin:0 0 8px 0; font-size:0.85rem; color:#555;">
+      Draw with Apple Pencil anywhere to trigger shortcuts. Use this menu to record, review, and debug.
+    </p>
+    <button type="button" class="primary" id="gesture-menu-record" style="margin-bottom:8px;">Record new gesture</button>
+    <button type="button" class="primary" id="gesture-menu-library" style="margin-bottom:8px; background:#5856D6;">Open gesture library</button>
+    <button type="button" class="primary" id="gesture-menu-toggle-debug" style="background:#34C759;">Toggle debug info</button>
+  </div>
+
+  <div id="encounter-overlay" class="panel-overlay"></div>
+  <div id="encounter-panel" class="panel">
+    <h3>Saved encounters</h3>
+    <p style="margin:0 0 8px 0; font-size:0.8rem; color:#555;">
+      Tap an encounter to load it into the initiative table.
+    </p>
+    <div id="encounter-list-empty" style="font-size:0.8rem; color:#888; display:none;">
+      No encounters saved yet.
+    </div>
+    <ul id="encounter-list" class="gesture-list"></ul>
+  </div>
+
+  <div id="parties-overlay" class="panel-overlay"></div>
+  <div id="parties-panel" class="panel">
+    <div id="parties-list-view">
+      <h3>Parties</h3>
+      <p style="margin:0 0 8px 0; font-size:0.8rem; color:#555;">
+        Add a saved party to initiative (name, init, AC only — no HP).
+      </p>
+      <button type="button" class="primary" id="parties-new-btn" style="margin-bottom:12px;">New party</button>
+      <div id="parties-list-empty" style="font-size:0.8rem; color:#888; display:none;">No parties saved yet.</div>
+      <ul id="parties-list" class="gesture-list"></ul>
+    </div>
+    <div id="parties-edit-view" style="display:none;">
+      <h3 id="parties-edit-title">Edit party</h3>
+      <input type="text" id="parties-edit-name" placeholder="Party name" style="margin-bottom:12px;" />
+      <div id="parties-members-list"></div>
+      <button type="button" class="secondary" id="parties-add-member-btn" style="margin-top:8px; margin-bottom:12px;">Add member</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="primary" id="parties-save-btn">Save party</button>
+        <button type="button" class="secondary" id="parties-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tracker-overlay" class="panel-overlay"></div>
+  <div id="tracker-panel" class="panel">
+    <h3>Initiative tracker</h3>
+    <div class="tracker-controls">
+      <input type="text" id="tracker-name" placeholder="Name (Goblin, Alice, etc.)" />
+      <input type="number" id="tracker-init" placeholder="Init" />
+      <input type="number" id="tracker-hp" placeholder="HP" />
+      <input type="number" id="tracker-ac" placeholder="AC" />
+      <button type="button" id="tracker-add">Add</button>
+      <button type="button" class="secondary" id="tracker-clear">Clear</button>
+    </div>
+    <div class="tracker-controls">
+      <input type="text" id="tracker-srd-query" placeholder="Search SRD (e.g. goblin)" />
+      <button type="button" id="tracker-srd-add">Add SRD monster</button>
+    </div>
+    <ul id="tracker-list" class="tracker-list"></ul>
+    <div style="margin-top:12px;font-size:0.8rem;color:#555;">
+      Arrow gesture ➜ advance turn (NEXT). You can record your own gestures and map them mentally to tracker actions.
+    </div>
+  </div>
+
+  <!-- Supabase client (for saved encounters etc.) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+(function() {
+  'use strict';
+
+  // Supabase client setup (public, anon key – fine for browser)
+  var SUPABASE_URL = 'https://wwbwmurriguwmmtqmhvu.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3YndtdXJyaWd1d21tdHFtaHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0MjY3OTIsImV4cCI6MjA4OTAwMjc5Mn0.19LhjVdm5_xrCYWrX4xAMQUZt_CSFB3PW2k5vEtlfSI';
+  var supabaseClient = window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  // ——— $1 Unistroke Recognizer (inline, from UW dollar recognizer) ———
+  function Point(x, y) {
+    this.X = x;
+    this.Y = y;
+  }
+  function Rectangle(x, y, width, height) {
+    this.X = x; this.Y = y; this.Width = width; this.Height = height;
+  }
+  function Unistroke(name, points) {
+    this.Name = name;
+    this.Points = Resample(points, NumPoints);
+    var radians = IndicativeAngle(this.Points);
+    this.Points = RotateBy(this.Points, -radians);
+    this.Points = ScaleTo(this.Points, SquareSize);
+    this.Points = TranslateTo(this.Points, Origin);
+    this.Vector = Vectorize(this.Points);
+  }
+  function Result(name, score) {
+    this.Name = name;
+    this.Score = score;
+  }
+  var NumPoints = 64;
+  var SquareSize = 250.0;
+  var Origin = new Point(0, 0);
+  var Diagonal = Math.sqrt(SquareSize * SquareSize + SquareSize * SquareSize);
+  var HalfDiagonal = 0.5 * Diagonal;
+  var AngleRange = (45.0 * Math.PI / 180.0);
+  var AnglePrecision = (2.0 * Math.PI / 180.0);
+  var Phi = 0.5 * (-1.0 + Math.sqrt(5.0));
+
+  function Resample(points, n) {
+    var I = PathLength(points) / (n - 1);
+    var D = 0.0;
+    var newpoints = [points[0]];
+    for (var i = 1; i < points.length; i++) {
+      var d = Distance(points[i - 1], points[i]);
+      if ((D + d) >= I) {
+        var qx = points[i - 1].X + ((I - D) / d) * (points[i].X - points[i - 1].X);
+        var qy = points[i - 1].Y + ((I - D) / d) * (points[i].Y - points[i - 1].Y);
+        newpoints.push(new Point(qx, qy));
+        points.splice(i, 0, new Point(qx, qy));
+        D = 0.0;
+      } else D += d;
+    }
+    if (newpoints.length === n - 1)
+      newpoints.push(new Point(points[points.length - 1].X, points[points.length - 1].Y));
+    return newpoints;
+  }
+  function IndicativeAngle(points) {
+    var c = Centroid(points);
+    return Math.atan2(c.Y - points[0].Y, c.X - points[0].X);
+  }
+  function RotateBy(points, radians) {
+    var c = Centroid(points);
+    var cos = Math.cos(radians), sin = Math.sin(radians);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(
+        (points[i].X - c.X) * cos - (points[i].Y - c.Y) * sin + c.X,
+        (points[i].X - c.X) * sin + (points[i].Y - c.Y) * cos + c.Y
+      ));
+    }
+    return newpoints;
+  }
+  function ScaleTo(points, size) {
+    var B = BoundingBox(points);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(
+        points[i].X * (size / B.Width),
+        points[i].Y * (size / B.Height)
+      ));
+    }
+    return newpoints;
+  }
+  function TranslateTo(points, pt) {
+    var c = Centroid(points);
+    var newpoints = [];
+    for (var i = 0; i < points.length; i++) {
+      newpoints.push(new Point(points[i].X + pt.X - c.X, points[i].Y + pt.Y - c.Y));
+    }
+    return newpoints;
+  }
+  function Vectorize(points) {
+    var sum = 0.0, vector = [];
+    for (var i = 0; i < points.length; i++) {
+      vector.push(points[i].X, points[i].Y);
+      sum += points[i].X * points[i].X + points[i].Y * points[i].Y;
+    }
+    var magnitude = Math.sqrt(sum);
+    for (var i = 0; i < vector.length; i++) vector[i] /= magnitude;
+    return vector;
+  }
+  function DistanceAtBestAngle(points, T, a, b, threshold) {
+    var x1 = Phi * a + (1.0 - Phi) * b, f1 = DistanceAtAngle(points, T, x1);
+    var x2 = (1.0 - Phi) * a + Phi * b, f2 = DistanceAtAngle(points, T, x2);
+    while (Math.abs(b - a) > threshold) {
+      if (f1 < f2) {
+        b = x2; x2 = x1; f2 = f1;
+        x1 = Phi * a + (1.0 - Phi) * b; f1 = DistanceAtAngle(points, T, x1);
+      } else {
+        a = x1; x1 = x2; f1 = f2;
+        x2 = (1.0 - Phi) * a + Phi * b; f2 = DistanceAtAngle(points, T, x2);
+      }
+    }
+    return Math.min(f1, f2);
+  }
+  function DistanceAtAngle(points, T, radians) {
+    return PathDistance(RotateBy(points, radians), T.Points);
+  }
+  function Centroid(points) {
+    var x = 0, y = 0;
+    for (var i = 0; i < points.length; i++) { x += points[i].X; y += points[i].Y; }
+    return new Point(x / points.length, y / points.length);
+  }
+  function BoundingBox(points) {
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < points.length; i++) {
+      minX = Math.min(minX, points[i].X); maxX = Math.max(maxX, points[i].X);
+      minY = Math.min(minY, points[i].Y); maxY = Math.max(maxY, points[i].Y);
+    }
+    return new Rectangle(minX, minY, maxX - minX, maxY - minY);
+  }
+  function PathDistance(pts1, pts2) {
+    var d = 0;
+    for (var i = 0; i < pts1.length; i++) d += Distance(pts1[i], pts2[i]);
+    return d / pts1.length;
+  }
+  function PathLength(points) {
+    var d = 0;
+    for (var i = 1; i < points.length; i++) d += Distance(points[i - 1], points[i]);
+    return d;
+  }
+  function Distance(p1, p2) {
+    var dx = p2.X - p1.X, dy = p2.Y - p1.Y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // Default templates: circle, checkmark, x, z, arrow (5 only)
+  var defaultTemplates = [
+    { name: 'circle', points: [new Point(127,141),new Point(124,140),new Point(120,139),new Point(118,139),new Point(116,139),new Point(111,140),new Point(109,141),new Point(104,144),new Point(100,147),new Point(96,152),new Point(93,157),new Point(90,163),new Point(87,169),new Point(85,175),new Point(83,181),new Point(82,190),new Point(82,195),new Point(83,200),new Point(84,205),new Point(88,213),new Point(91,216),new Point(96,219),new Point(103,222),new Point(108,224),new Point(111,224),new Point(120,224),new Point(133,223),new Point(142,222),new Point(152,218),new Point(160,214),new Point(167,210),new Point(173,204),new Point(178,198),new Point(179,196),new Point(182,188),new Point(182,177),new Point(178,167),new Point(170,150),new Point(163,138),new Point(152,130),new Point(143,129),new Point(140,131),new Point(129,136),new Point(126,139)] },
+    { name: 'checkmark', points: [new Point(91,185),new Point(93,185),new Point(95,185),new Point(97,185),new Point(100,188),new Point(102,189),new Point(104,190),new Point(106,193),new Point(108,195),new Point(110,198),new Point(112,201),new Point(114,204),new Point(115,207),new Point(117,210),new Point(118,212),new Point(120,214),new Point(121,217),new Point(122,219),new Point(123,222),new Point(124,224),new Point(126,226),new Point(127,229),new Point(129,231),new Point(130,233),new Point(129,231),new Point(129,228),new Point(129,226),new Point(129,224),new Point(129,221),new Point(129,218),new Point(129,212),new Point(129,208),new Point(130,198),new Point(132,189),new Point(134,182),new Point(137,173),new Point(143,164),new Point(147,157),new Point(151,151),new Point(155,144),new Point(161,137),new Point(165,131),new Point(171,122),new Point(174,118),new Point(176,114),new Point(177,112),new Point(177,114),new Point(175,116),new Point(173,118)] },
+    { name: 'x', points: [new Point(87,142),new Point(89,145),new Point(91,148),new Point(93,151),new Point(96,155),new Point(98,157),new Point(100,160),new Point(102,162),new Point(106,167),new Point(108,169),new Point(110,171),new Point(115,177),new Point(119,183),new Point(123,189),new Point(127,193),new Point(129,196),new Point(133,200),new Point(137,206),new Point(140,209),new Point(143,212),new Point(146,215),new Point(151,220),new Point(153,222),new Point(155,223),new Point(157,225),new Point(158,223),new Point(157,218),new Point(155,211),new Point(154,208),new Point(152,200),new Point(150,189),new Point(148,179),new Point(147,170),new Point(147,158),new Point(147,148),new Point(147,141),new Point(147,136),new Point(144,135),new Point(142,137),new Point(140,139),new Point(135,145),new Point(131,152),new Point(124,163),new Point(116,177),new Point(108,191),new Point(100,206),new Point(94,217),new Point(91,222),new Point(89,225),new Point(87,226),new Point(87,224)] },
+    { name: 'z', points: (function() {
+        var pts = [];
+        for (var i = 0; i <= 15; i++) pts.push(new Point(30 + (220 - 30) * i / 15, 30));
+        for (var i = 1; i <= 15; i++) pts.push(new Point(220 - (220 - 30) * i / 15, 30 + (220 - 30) * i / 15));
+        for (var i = 1; i <= 15; i++) pts.push(new Point(30 + (220 - 30) * i / 15, 220));
+        return pts;
+      })() },
+    { name: 'arrow', points: [new Point(68,222),new Point(70,220),new Point(73,218),new Point(75,217),new Point(77,215),new Point(80,213),new Point(82,212),new Point(84,210),new Point(87,209),new Point(89,208),new Point(92,206),new Point(95,204),new Point(101,201),new Point(106,198),new Point(112,194),new Point(118,191),new Point(124,187),new Point(127,186),new Point(132,183),new Point(138,181),new Point(141,180),new Point(146,178),new Point(154,173),new Point(159,171),new Point(161,170),new Point(166,167),new Point(168,167),new Point(171,166),new Point(174,164),new Point(177,162),new Point(180,160),new Point(182,158),new Point(183,156),new Point(181,154),new Point(178,153),new Point(171,153),new Point(164,153),new Point(160,153),new Point(150,154),new Point(147,155),new Point(141,157),new Point(137,158),new Point(135,158),new Point(137,158),new Point(140,157),new Point(143,156),new Point(151,154),new Point(160,152),new Point(170,149),new Point(179,147),new Point(185,145),new Point(192,144),new Point(196,144),new Point(198,144),new Point(200,144),new Point(201,147),new Point(199,149),new Point(194,157),new Point(191,160),new Point(186,167),new Point(180,176),new Point(177,179),new Point(171,187),new Point(169,189),new Point(165,194),new Point(164,196)] }
+  ];
+
+  var DEFAULT_ACTIONS = {
+    circle: 'UNDO',
+    checkmark: 'SAVE',
+    x: 'DELETE',
+    z: 'UNDO (Z)',
+    arrow: 'NEXT'
+  };
+
+  function DollarRecognizer() {
+    this.Unistrokes = [];
+    for (var i = 0; i < defaultTemplates.length; i++) {
+      var t = defaultTemplates[i];
+      this.Unistrokes.push(new Unistroke(t.name, t.points));
+    }
+  }
+  DollarRecognizer.prototype.Recognize = function(points) {
+    if (points.length < 10) return new Result('', 0);
+    points = Resample(points.slice(), NumPoints);
+    var radians = IndicativeAngle(points);
+    points = RotateBy(points, -radians);
+    points = ScaleTo(points, SquareSize);
+    points = TranslateTo(points, Origin);
+    var b = Infinity, u = -1;
+    for (var i = 0; i < this.Unistrokes.length; i++) {
+      var d = DistanceAtBestAngle(points, this.Unistrokes[i], -AngleRange, AngleRange, AnglePrecision);
+      if (d < b) { b = d; u = i; }
+    }
+    return u === -1 ? new Result('', 0) : new Result(this.Unistrokes[u].Name, 1.0 - b / HalfDiagonal);
+  };
+  DollarRecognizer.prototype.AddGesture = function(name, points) {
+    this.Unistrokes.push(new Unistroke(name, points));
+  };
+  DollarRecognizer.prototype.RemoveGestureByName = function(name, onRemoveRaw) {
+    var defNames = defaultTemplates.map(function(t) { return t.name; });
+    if (defNames.indexOf(name) !== -1) return;
+    for (var i = this.Unistrokes.length - 1; i >= 0; i--) {
+      if (this.Unistrokes[i].Name === name) {
+        this.Unistrokes.splice(i, 1);
+        if (onRemoveRaw) onRemoveRaw(name);
+        return;
+      }
+    }
+  };
+  DollarRecognizer.prototype.GetGestureNames = function() {
+    var names = [];
+    for (var i = 0; i < this.Unistrokes.length; i++) names.push(this.Unistrokes[i].Name);
+    return names;
+  };
+
+  var STORAGE_KEY = 'gestureShortcutsSaved';
+  var customGestureRaw = {}; // name -> array of {x,y} (raw) for persistence
+  function loadSavedGestures(recognizer) {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var arr = JSON.parse(raw);
+      var changed = false;
+      for (var i = 0; i < arr.length; i++) {
+        var o = arr[i];
+        var rawPts = (o.points || []).map(function(p) {
+          return { x: p.X != null ? p.X : p.x, y: p.Y != null ? p.Y : p.y };
+        });
+        // Skip any corrupted gestures (non-numeric coords)
+        if (!rawPts.length) continue;
+        var allValid = true;
+        for (var j = 0; j < rawPts.length; j++) {
+          var px = rawPts[j].x;
+          var py = rawPts[j].y;
+          if (typeof px !== 'number' || !isFinite(px) ||
+              typeof py !== 'number' || !isFinite(py)) {
+            allValid = false;
+            break;
+          }
+        }
+        if (!allValid) {
+          changed = true;
+          continue;
+        }
+        if (rawPts.length >= 10) {
+          var pts = rawPts.map(function(p) { return new Point(p.x, p.y); });
+          recognizer.AddGesture(o.name, pts);
+          customGestureRaw[o.name] = rawPts;
+        }
+      }
+      if (changed) {
+        // Rewrite storage without corrupted gestures
+        saveGestures(recognizer);
+      }
+    } catch (e) {}
+  }
+  function saveCustomGestureRaw(name, points) {
+    customGestureRaw[name] = points.map(function(p) {
+      // Support both raw {x,y} and Point {X,Y}
+      var x = (p.x != null ? p.x : p.X);
+      var y = (p.y != null ? p.y : p.Y);
+      return { x: x, y: y };
+    });
+  }
+  function removeCustomGestureRaw(name) {
+    delete customGestureRaw[name];
+  }
+  function saveGestures(recognizer) {
+    var out = [];
+    for (var name in customGestureRaw) {
+      if (!customGestureRaw.hasOwnProperty(name)) continue;
+      var pts = customGestureRaw[name];
+      out.push({ name: name, points: pts.map(function(p) { return { X: p.x, Y: p.y }; }) });
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(out));
+  }
+
+  // ——— App state ———
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var recognizer = new DollarRecognizer();
+  loadSavedGestures(recognizer);
+
+  var strokePoints = [];
+  var isDrawing = false;
+  var recordMode = false;
+  var recordName = '';
+  var clearTimeoutId = null;
+  var lastPointerType = '—';
+  var lastPointCount = 0;
+  var lastResultName = '—';
+  var lastResultScore = '—';
+  var lastRecognitionTime = '—';
+
+  // Initiative tracker state
+  var combatants = [];
+  var activeCombatantIndex = -1;
+  var srdMonsterCache = {}; // key: monster index, value: full monster JSON
+  var monsterIndex = []; // list of all SRD monsters (index + name + url)
+  var useRolledHp = false; // if true, new SRD monsters roll HP from hit dice
+
+  function createEmptyStateForCombatant() {
+    return {
+      tempHp: 0,
+      conditions: [],
+      isConcentrating: false
+    };
+  }
+
+  function sortCombatants() {
+    combatants.sort(function(a, b) {
+      if (b.init === a.init) return (b.dexMod || 0) - (a.dexMod || 0);
+      return b.init - a.init;
+    });
+  }
+
+  function renderCombatants() {
+    var listEl = document.getElementById('tracker-list');
+    var tableBody = document.getElementById('initiative-table-body');
+
+    if (listEl) {
+      listEl.innerHTML = '';
+    }
+    if (tableBody) {
+      tableBody.innerHTML = '';
+    }
+
+    combatants.forEach(function(c, idx) {
+      // Tracker panel list
+      var li = null;
+      if (listEl) {
+        li = document.createElement('li');
+        if (idx === activeCombatantIndex) li.classList.add('active');
+        var left = document.createElement('div');
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = c.name || '—';
+        var metaSpan = document.createElement('span');
+        metaSpan.className = 'meta';
+        metaSpan.textContent = 'Init ' + c.init + ' • AC ' + (c.ac != null ? c.ac : '—');
+        left.appendChild(nameSpan);
+        left.appendChild(metaSpan);
+
+        var right = document.createElement('div');
+        var hpSpan = document.createElement('span');
+        hpSpan.className = 'hp';
+        hpSpan.textContent = (c.maxHp > 0)
+          ? ('HP ' + c.hp + (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') + '/' + c.maxHp)
+          : '—';
+        right.appendChild(hpSpan);
+
+        li.appendChild(left);
+        li.appendChild(right);
+        listEl.appendChild(li);
+      }
+
+      // Main-page initiative table
+      var tr = null;
+      if (tableBody) {
+        tr = document.createElement('tr');
+        if (idx === activeCombatantIndex) tr.classList.add('active');
+        if (c.maxHp > 0 && c.hp <= 0) tr.classList.add('dead');
+
+        var tdOrder = document.createElement('td');
+        tdOrder.textContent = (idx + 1).toString();
+
+        var tdName = document.createElement('td');
+        tdName.className = 'name-cell';
+        var nameTextSpan = document.createElement('span');
+        nameTextSpan.className = 'name-text';
+        nameTextSpan.textContent = c.name || '—';
+        var nameDeathSpan = document.createElement('span');
+        nameDeathSpan.className = 'name-death';
+        nameDeathSpan.textContent = (c.maxHp > 0 && c.hp <= 0 ? '☠' : '');
+        tdName.appendChild(nameTextSpan);
+        tdName.appendChild(nameDeathSpan);
+
+        var tdInit = document.createElement('td');
+        tdInit.textContent = String(c.init);
+
+        var tdAc = document.createElement('td');
+        tdAc.textContent = (c.ac != null ? c.ac : '—');
+
+        var tdHp = document.createElement('td');
+        tdHp.className = 'hp-cell';
+        var noHpTracking = (c.maxHp == null || c.maxHp <= 0);
+        if (noHpTracking) {
+          tdHp.textContent = '—';
+        } else {
+          var hpEditorHtml =
+            '<div class="hp-editor">' +
+              '<div class="hp-row">' +
+                '<input type="range" class="hp-slider hp-main" min="0" max="' + c.maxHp + '" value="' + c.hp + '">' +
+                '<input type="number" class="hp-current-input" min="0" max="' + c.maxHp + '" value="' + c.hp + '" title="Current HP">' +
+              '</div>' +
+              '<div class="hp-temp-row">' +
+                '<label>Temp</label>' +
+                '<input type="number" class="hp-temp-input" min="0" max="999" value="' + (c.tempHp ? c.tempHp : '') + '" placeholder="0" title="Temp HP">' +
+              '</div>' +
+              '<div class="hp-meta">' +
+                'HP ' + c.hp +
+                (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+                '/' + c.maxHp +
+              '</div>' +
+            '</div>';
+          tdHp.innerHTML = hpEditorHtml;
+        }
+
+        var tdControls = document.createElement('td');
+        tdControls.className = 'controls-cell';
+
+        var controlsMain = document.createElement('div');
+        controlsMain.className = 'controls-main-row';
+
+        // Conditions selector (single-select toggle: pick/add/remove, supports multiple active)
+        var condSelect = document.createElement('select');
+        var placeholderOpt = document.createElement('option');
+        placeholderOpt.value = '';
+        placeholderOpt.textContent = 'Add condition…';
+        placeholderOpt.disabled = true;
+        placeholderOpt.selected = true;
+        condSelect.appendChild(placeholderOpt);
+        var noneOpt = document.createElement('option');
+        noneOpt.value = 'None';
+        noneOpt.textContent = 'Clear all';
+        condSelect.appendChild(noneOpt);
+        var condOptions = ['Blinded','Bloodied','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
+        condOptions.forEach(function(name) {
+          var opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          condSelect.appendChild(opt);
+        });
+        controlsMain.appendChild(condSelect);
+
+        // Concentration toggle
+        var concLabel = document.createElement('label');
+        concLabel.title = 'Concentrating';
+        var concCheckbox = document.createElement('input');
+        concCheckbox.type = 'checkbox';
+        concCheckbox.checked = !!c.isConcentrating;
+        concLabel.appendChild(concCheckbox);
+        concLabel.appendChild(document.createTextNode('Conc'));
+        controlsMain.appendChild(concLabel);
+
+        // Remove button
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = 'X';
+        controlsMain.appendChild(removeBtn);
+
+        tdControls.appendChild(controlsMain);
+
+        // Status summary (conditions + concentration) display
+        var statusSpan = document.createElement('div');
+        statusSpan.className = 'status-summary controls-secondary-row';
+        tdControls.appendChild(statusSpan);
+
+        tr.appendChild(tdOrder);
+        tr.appendChild(tdName);
+        tr.appendChild(tdInit);
+        tr.appendChild(tdAc);
+        tr.appendChild(tdHp);
+        tr.appendChild(tdControls);
+
+        // Wire HP slider, current HP input, temp HP input & conditions for this row
+        var hpMainEl = tdHp.querySelector('.hp-main');
+        var hpCurrentInput = tdHp.querySelector('.hp-current-input');
+        var hpTempInput = tdHp.querySelector('.hp-temp-input');
+        var hpMetaEl = tdHp.querySelector('.hp-meta');
+        function updateStatusSummary() {
+          var condText = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
+          var concText = c.isConcentrating ? 'Conc' : '';
+          var parts = [];
+          if (condText) parts.push(condText);
+          if (concText) parts.push(concText);
+          var summary = parts.join(' | ');
+          statusSpan.textContent = summary;
+          statusSpan.title = summary || '';
+        }
+        function setHpBarFills() {
+          var hpFrac = (c.maxHp > 0 ? (c.hp / c.maxHp) : 0);
+          if (hpFrac < 0) hpFrac = 0;
+          if (hpFrac > 1) hpFrac = 1;
+          var hpPct = hpFrac * 100;
+          var tempPct = Math.min(100, ((c.tempHp || 0) / 999) * 100);
+
+          // Interpolate HP colour between green (#34C759) and red (#FF3B30)
+          var green = { r: 0x34, g: 0xC7, b: 0x59 };
+          var red   = { r: 0xFF, g: 0x3B, b: 0x30 };
+          var r = Math.round(red.r + (green.r - red.r) * hpFrac);
+          var g = Math.round(red.g + (green.g - red.g) * hpFrac);
+          var b = Math.round(red.b + (green.b - red.b) * hpFrac);
+          var hpColor = '#' +
+            r.toString(16).padStart(2, '0') +
+            g.toString(16).padStart(2, '0') +
+            b.toString(16).padStart(2, '0');
+
+          if (hpMainEl) {
+            hpMainEl.style.setProperty('--hp-fill', hpPct + '%');
+            hpMainEl.style.setProperty('--hp-color', hpColor);
+          }
+        }
+        function updateBloodiedCondition() {
+          var isBloodied = (c.maxHp > 0 && c.hp <= c.maxHp * 0.5);
+          if (!c.conditions) c.conditions = [];
+          var idx = c.conditions.indexOf('Bloodied');
+          if (isBloodied && idx === -1) {
+            c.conditions.push('Bloodied');
+          } else if (!isBloodied && idx !== -1) {
+            c.conditions.splice(idx, 1);
+          }
+          updateStatusSummary();
+        }
+        function updateHpMeta() {
+          if (hpMetaEl) {
+            hpMetaEl.textContent =
+              'HP ' + c.hp +
+              (c.tempHp ? ' (+' + c.tempHp + ' temp)' : '') +
+              '/' + c.maxHp;
+          }
+        }
+        setHpBarFills();
+        if (hpMainEl && hpMetaEl) {
+          hpMainEl.addEventListener('input', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpMainEl.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > c.maxHp) val = c.maxHp;
+            c.hp = val;
+            if (hpCurrentInput) hpCurrentInput.value = val;
+            setHpBarFills();
+            updateBloodiedCondition();
+            if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
+            updateHpMeta();
+            if (tr) {
+              if (c.hp <= 0) tr.classList.add('dead');
+              else tr.classList.remove('dead');
+            }
+            if (li) {
+              if (c.hp <= 0) li.classList.add('dead');
+              else li.classList.remove('dead');
+            }
+            renderCurrentTurnPanel();
+          });
+        }
+        if (hpCurrentInput && hpMetaEl) {
+          hpCurrentInput.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpCurrentInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > c.maxHp) val = c.maxHp;
+            c.hp = val;
+            hpCurrentInput.value = val;
+            if (hpMainEl) hpMainEl.value = val;
+            setHpBarFills();
+            updateBloodiedCondition();
+            if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
+            updateHpMeta();
+            if (tr) {
+              if (c.hp <= 0) tr.classList.add('dead');
+              else tr.classList.remove('dead');
+            }
+            if (li) {
+              if (c.hp <= 0) li.classList.add('dead');
+              else li.classList.remove('dead');
+            }
+            renderCurrentTurnPanel();
+          });
+        }
+        if (hpTempInput && hpMetaEl) {
+          hpTempInput.addEventListener('input', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpTempInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 999) val = 999;
+            c.tempHp = val;
+            hpTempInput.value = val;
+            updateHpMeta();
+            renderCurrentTurnPanel();
+          });
+          hpTempInput.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            var val = parseInt(hpTempInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 999) val = 999;
+            c.tempHp = val;
+            hpTempInput.value = val;
+            updateHpMeta();
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (condSelect) {
+          condSelect.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            if (!c.conditions) c.conditions = [];
+            var val = condSelect.value;
+            if (!val) {
+              // placeholder, ignore
+              return;
+            }
+            if (val === 'None') {
+              // Clear all conditions except auto-managed ones like Bloodied
+              c.conditions = c.conditions.filter(function(name) { return name === 'Bloodied'; });
+            } else {
+              var idxCond = c.conditions.indexOf(val);
+              if (idxCond === -1) {
+                // Add condition
+                c.conditions.push(val);
+              } else {
+                // Remove condition if already present
+                c.conditions.splice(idxCond, 1);
+              }
+            }
+            // Reset dropdown back to placeholder so next pick is explicit
+            condSelect.value = '';
+            updateStatusSummary();
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (concCheckbox) {
+          concCheckbox.addEventListener('change', function(ev) {
+            ev.stopPropagation();
+            c.isConcentrating = !!concCheckbox.checked;
+            updateStatusSummary();
+            renderCurrentTurnPanel();
+          });
+        }
+
+        if (removeBtn) {
+          removeBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            removeCombatantAt(idx);
+          });
+        }
+
+        // Initialize status summary display
+        updateStatusSummary();
+
+        tr.addEventListener('click', function(evt) {
+          // Avoid changing turn when clicking HP controls or row buttons
+          if (evt.target && evt.target.closest &&
+              (evt.target.closest('.hp-editor') || evt.target.closest('.controls-cell'))) {
+            return;
+          }
+          activeCombatantIndex = idx;
+          renderCombatants();
+        });
+
+        tableBody.appendChild(tr);
+      }
+    });
+
+    renderCurrentTurnPanel();
+  }
+
+  function goToNextCombatant() {
+    if (!combatants.length) return;
+    activeCombatantIndex = (activeCombatantIndex + 1) % combatants.length;
+    renderCombatants();
+  }
+
+  function goToPreviousCombatant() {
+    if (!combatants.length) return;
+    activeCombatantIndex = (activeCombatantIndex - 1 + combatants.length) % combatants.length;
+    renderCombatants();
+  }
+
+  function addCombatantFromInputs() {
+    var nameEl = document.getElementById('tracker-name');
+    var initEl = document.getElementById('tracker-init');
+    var hpEl = document.getElementById('tracker-hp');
+    var acEl = document.getElementById('tracker-ac');
+    if (!nameEl || !initEl || !hpEl || !acEl) return;
+    var name = nameEl.value.trim() || 'Creature';
+    var initBonus = parseInt(initEl.value, 10);
+    var hp = parseInt(hpEl.value, 10);
+    var ac = parseInt(acEl.value, 10);
+    if (isNaN(initBonus)) initBonus = 0;
+    if (isNaN(hp)) hp = 10;
+    if (isNaN(ac)) ac = 10;
+    combatants.push(Object.assign({
+      name: name,
+      init: 10 + initBonus,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: initBonus,
+      srd: null
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+    nameEl.value = '';
+    initEl.value = '';
+    hpEl.value = '';
+    acEl.value = '';
+  }
+
+  function addManualCombatantFromMonsterPanel() {
+    var nameEl = document.getElementById('monster-manual-name');
+    var initEl = document.getElementById('monster-manual-init');
+    var hpEl = document.getElementById('monster-manual-hp');
+    var acEl = document.getElementById('monster-manual-ac');
+    if (!nameEl || !hpEl || !acEl) return;
+    var name = (nameEl.value || '').trim() || 'Creature';
+    var initBonus = parseInt(initEl.value, 10);
+    var hp = parseInt(hpEl.value, 10);
+    var ac = parseInt(acEl.value, 10);
+    if (isNaN(initBonus)) initBonus = 0;
+    if (isNaN(hp)) hp = 10;
+    if (isNaN(ac)) ac = 10;
+    // Auto-roll initiative on add: 1d20 + initBonus
+    var initRoll = rollD20();
+    combatants.push(Object.assign({
+      name: name,
+      init: initRoll + initBonus,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: initBonus,
+      srd: null
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+    nameEl.value = '';
+    initEl.value = '';
+    hpEl.value = '';
+    acEl.value = '';
+  }
+
+  function clearCombatants() {
+    combatants = [];
+    activeCombatantIndex = -1;
+    renderCombatants();
+  }
+
+  function removeCombatantAt(index) {
+    if (index < 0 || index >= combatants.length) return;
+    combatants.splice(index, 1);
+    if (!combatants.length) {
+      activeCombatantIndex = -1;
+    } else if (activeCombatantIndex >= combatants.length) {
+      activeCombatantIndex = combatants.length - 1;
+    } else if (index < activeCombatantIndex) {
+      activeCombatantIndex -= 1;
+    }
+    renderCombatants();
+  }
+
+  function rollInitiativeForAll() {
+    if (!combatants.length) return;
+    combatants.forEach(function(c) {
+      var mod;
+      if (c.srd && typeof c.srd.dex === 'number') {
+        mod = Math.floor((c.srd.dex - 10) / 2);
+        c.dexMod = mod;
+      } else if (typeof c.dexMod === 'number') {
+        mod = c.dexMod;
+      } else {
+        mod = 0;
+      }
+      var roll = rollD20();
+      c.init = roll + mod;
+    });
+    sortCombatants();
+    activeCombatantIndex = 0;
+    renderCombatants();
+  }
+
+  // Supabase-powered encounter save/load (minimal first pass)
+  async function saveCurrentEncounter() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot save encounter.');
+      return;
+    }
+    if (!combatants.length) {
+      // Nothing to save; just ignore without popping UI.
+      return;
+    }
+    var nameInput = document.getElementById('encounter-name-input');
+    var saveBtn = document.getElementById('save-encounter-btn');
+    if (saveBtn) {
+      // Immediate visual feedback so you see the click
+      saveBtn.classList.add('save-working');
+      saveBtn.textContent = 'Saving…';
+      saveBtn.disabled = true;
+    }
+    var name = (nameInput && nameInput.value && nameInput.value.trim())
+      ? nameInput.value.trim()
+      : 'Encounter ' + new Date().toLocaleString();
+
+    try {
+      var nowIso = new Date().toISOString();
+      var encRes = await supabaseClient
+        .from('encounters')
+        .insert({ name: name, created_at: nowIso, last_played_at: nowIso })
+        .select('id')
+        .single();
+      if (encRes.error) throw encRes.error;
+      var encounterId = encRes.data.id;
+
+      var rows = combatants.map(function(c, idx) {
+        var row = {
+          encounter_id: encounterId,
+          creature_id: null,
+          name: c.name || '—',
+          init: typeof c.init === 'number' ? c.init : null,
+          ac: (c.ac != null ? c.ac : null),
+          max_hp: (c.maxHp != null ? c.maxHp : null),
+          current_hp: (c.hp != null ? c.hp : null),
+          temp_hp: c.tempHp || 0,
+          conditions: Array.isArray(c.conditions) ? c.conditions : [],
+          is_concentrating: !!c.isConcentrating,
+          order_index: idx + 1
+        };
+        if (c.srd && typeof c.srd.index === 'string') {
+          row.srd_index = c.srd.index;
+        }
+        return row;
+      });
+
+      var rowsRes = await supabaseClient
+        .from('encounter_combatants')
+        .insert(rows);
+      if (rowsRes.error && rows.some(function(r) { return r.hasOwnProperty('srd_index'); })) {
+        rows = rows.map(function(r) {
+          var copy = {};
+          for (var k in r) if (r.hasOwnProperty(k) && k !== 'srd_index') copy[k] = r[k];
+          return copy;
+        });
+        rowsRes = await supabaseClient.from('encounter_combatants').insert(rows);
+      }
+      if (rowsRes.error) throw rowsRes.error;
+
+      if (saveBtn) {
+        saveBtn.classList.remove('save-working');
+        saveBtn.classList.add('save-success');
+        saveBtn.textContent = 'Saved';
+        setTimeout(function() {
+          saveBtn.classList.remove('save-success');
+          saveBtn.textContent = 'Save';
+          saveBtn.disabled = false;
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Failed to save encounter', err);
+      if (saveBtn) {
+        saveBtn.classList.remove('save-working');
+        saveBtn.classList.add('save-error');
+        saveBtn.textContent = 'Error';
+        setTimeout(function() {
+          saveBtn.classList.remove('save-error');
+          saveBtn.textContent = 'Save';
+          saveBtn.disabled = false;
+        }, 2000);
+      }
+    }
+  }
+
+  function getMonsterByIndex(index) {
+    if (!index || typeof index !== 'string') return Promise.resolve(null);
+    if (srdMonsterCache[index]) return Promise.resolve(srdMonsterCache[index]);
+    return fetch('https://www.dnd5eapi.co/api/monsters/' + encodeURIComponent(index))
+      .then(function(res) { return res.json(); })
+      .then(function(monster) {
+        if (monster && index) srdMonsterCache[index] = monster;
+        return monster;
+      })
+      .catch(function() { return null; });
+  }
+
+  function getMonsterByName(name) {
+    if (!name || typeof name !== 'string') return Promise.resolve(null);
+    var trimmed = name.trim();
+    if (!trimmed) return Promise.resolve(null);
+    return fetch('https://www.dnd5eapi.co/api/monsters?name=' + encodeURIComponent(trimmed))
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data.results || !data.results.length) return null;
+        var first = data.results[0];
+        if (first.index && srdMonsterCache[first.index]) return srdMonsterCache[first.index];
+        if (!first.url) return null;
+        return fetch('https://www.dnd5eapi.co' + first.url)
+          .then(function(r) { return r.json(); })
+          .then(function(monster) {
+            if (monster && first.index) srdMonsterCache[first.index] = monster;
+            return monster;
+          });
+      })
+      .catch(function() { return null; });
+  }
+
+  async function loadEncounterById(encounterId, encounterName) {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot load encounter.');
+      return;
+    }
+    try {
+      var rowsRes = await supabaseClient
+        .from('encounter_combatants')
+        .select('*')
+        .eq('encounter_id', encounterId)
+        .order('order_index', { ascending: true });
+      if (rowsRes.error) throw rowsRes.error;
+
+      var rows = rowsRes.data || [];
+      var monsters = await Promise.all(rows.map(function(r) {
+        if (r.srd_index) return getMonsterByIndex(r.srd_index);
+        return getMonsterByName(r.name);
+      }));
+
+      combatants = rows.map(function(r, i) {
+        var monster = monsters[i] || null;
+        var dexMod = monster && typeof monster.dexterity === 'number'
+          ? Math.floor((monster.dexterity - 10) / 2)
+          : 0;
+        return Object.assign({
+          name: r.name,
+          init: r.init != null ? r.init : 0,
+          hp: r.current_hp != null ? r.current_hp : (r.max_hp != null ? r.max_hp : 0),
+          maxHp: r.max_hp != null ? r.max_hp : 0,
+          ac: r.ac != null ? r.ac : null,
+          dexMod: dexMod,
+          srd: monster
+        }, createEmptyStateForCombatant(), {
+          tempHp: r.temp_hp || 0,
+          conditions: Array.isArray(r.conditions) ? r.conditions : [],
+          isConcentrating: !!r.is_concentrating
+        });
+      });
+      activeCombatantIndex = combatants.length ? 0 : -1;
+      renderCombatants();
+      renderCurrentTurnPanel();
+
+      var nameInput = document.getElementById('encounter-name-input');
+      if (nameInput && encounterName) {
+        var isAutoGenerated = /^Encounter\s+[\d\/\.,\s:]+(AM|PM)?$/i.test(encounterName.trim());
+        nameInput.value = isAutoGenerated ? '' : encounterName;
+      }
+    } catch (err) {
+      console.error('Failed to load encounter', err);
+    }
+  }
+
+  async function openEncounterMenu() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot open encounter menu.');
+      return;
+    }
+    var overlay = document.getElementById('encounter-overlay');
+    var panel = document.getElementById('encounter-panel');
+    var listEl = document.getElementById('encounter-list');
+    var emptyEl = document.getElementById('encounter-list-empty');
+    if (!overlay || !panel || !listEl || !emptyEl) return;
+
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+
+    try {
+      var res = await supabaseClient
+        .from('encounters')
+        .select('id,name,created_at')
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (res.error) throw res.error;
+      var rows = res.data || [];
+      if (!rows.length) {
+        emptyEl.style.display = 'block';
+      } else {
+        rows.forEach(function(enc) {
+          var li = document.createElement('li');
+          li.className = ''; // use default .gesture-list li styling
+          var label = enc.name || 'Unnamed';
+          var date = enc.created_at ? new Date(enc.created_at).toLocaleString() : '';
+          li.innerHTML =
+            '<span class="name">' + label + (date ? ' — ' + date : '') + '</span>' +
+            '<button type="button" class="delete-btn">Delete</button>';
+
+          var deleteBtn = li.querySelector('.delete-btn');
+          if (deleteBtn) {
+            deleteBtn.addEventListener('click', function(ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              supabaseClient
+                .from('encounters')
+                .delete()
+                .eq('id', enc.id)
+                .then(function(resDel) {
+                  if (resDel.error) {
+                    console.error('Failed to delete encounter', resDel.error);
+                    return;
+                  }
+                  li.remove();
+                  if (!listEl.children.length) {
+                    emptyEl.style.display = 'block';
+                  }
+                });
+            });
+          }
+
+          li.addEventListener('click', function() {
+            panel.classList.remove('visible');
+            overlay.classList.remove('visible');
+            loadEncounterById(enc.id, enc.name);
+          });
+          listEl.appendChild(li);
+        });
+      }
+      overlay.classList.add('visible');
+      panel.classList.add('visible');
+    } catch (err) {
+      console.error('Failed to load encounter list', err);
+    }
+  }
+
+  var editingPartyId = null; // null = new party, uuid = edit existing
+
+  async function openPartiesMenu() {
+    if (!supabaseClient) {
+      console.warn('Supabase client not available; cannot open parties.');
+      return;
+    }
+    var overlay = document.getElementById('parties-overlay');
+    var panel = document.getElementById('parties-panel');
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    if (!overlay || !panel || !listView || !editView) return;
+    listView.style.display = '';
+    editView.style.display = 'none';
+    overlay.classList.add('visible');
+    panel.classList.add('visible');
+    await renderPartiesList();
+  }
+
+  async function renderPartiesList() {
+    var listEl = document.getElementById('parties-list');
+    var emptyEl = document.getElementById('parties-list-empty');
+    if (!listEl || !emptyEl) return;
+    listEl.innerHTML = '';
+    try {
+      var res = await supabaseClient
+        .from('parties')
+        .select('id,name,created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (res.error) throw res.error;
+      var rows = res.data || [];
+      emptyEl.style.display = rows.length ? 'none' : 'block';
+      rows.forEach(function(p) {
+        var li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.flexWrap = 'wrap';
+        li.style.alignItems = 'center';
+        li.style.gap = '8px';
+        li.style.marginBottom = '8px';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = p.name || 'Unnamed party';
+        nameSpan.style.flex = '1';
+        nameSpan.style.minWidth = '0';
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'primary';
+        addBtn.style.fontSize = '0.75rem';
+        addBtn.style.padding = '6px 10px';
+        addBtn.textContent = 'Add to initiative';
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'secondary';
+        editBtn.style.fontSize = '0.75rem';
+        editBtn.style.padding = '6px 10px';
+        editBtn.textContent = 'Edit';
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'delete-btn';
+        delBtn.textContent = 'Delete';
+        addBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          addPartyToInitiative(p.id);
+        });
+        editBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          openEditParty(p.id);
+        });
+        delBtn.addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          deleteParty(p.id, li);
+        });
+        li.appendChild(nameSpan);
+        li.appendChild(addBtn);
+        li.appendChild(editBtn);
+        li.appendChild(delBtn);
+        listEl.appendChild(li);
+      });
+    } catch (err) {
+      console.error('Failed to load parties', err);
+    }
+  }
+
+  async function addPartyToInitiative(partyId) {
+    if (!supabaseClient) return;
+    try {
+      var res = await supabaseClient
+        .from('party_members')
+        .select('name,init_bonus,ac')
+        .eq('party_id', partyId)
+        .order('order_index', { ascending: true });
+      if (res.error) throw res.error;
+      var members = res.data || [];
+      if (!members.length) return;
+      members.forEach(function(m) {
+        var initBonus = typeof m.init_bonus === 'number' ? m.init_bonus : 0;
+        var initRoll = rollD20();
+        var init = initRoll + initBonus;
+        var ac = (m.ac != null ? m.ac : null);
+        combatants.push(Object.assign({
+          name: m.name || '—',
+          init: init,
+          hp: 0,
+          maxHp: 0,
+          ac: ac,
+          dexMod: initBonus,
+          srd: null
+        }, createEmptyStateForCombatant()));
+      });
+      sortCombatants();
+      if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+      renderCombatants();
+      renderCurrentTurnPanel();
+      var overlay = document.getElementById('parties-overlay');
+      var panel = document.getElementById('parties-panel');
+      if (overlay) overlay.classList.remove('visible');
+      if (panel) panel.classList.remove('visible');
+    } catch (err) {
+      console.error('Failed to add party to initiative', err);
+    }
+  }
+
+  async function deleteParty(partyId, listItemEl) {
+    if (!supabaseClient) return;
+    try {
+      var res = await supabaseClient.from('parties').delete().eq('id', partyId);
+      if (res.error) throw res.error;
+      if (listItemEl && listItemEl.parentNode) listItemEl.remove();
+      var listEl = document.getElementById('parties-list');
+      if (listEl && !listEl.children.length) {
+        var emptyEl = document.getElementById('parties-list-empty');
+        if (emptyEl) emptyEl.style.display = 'block';
+      }
+    } catch (err) {
+      console.error('Failed to delete party', err);
+    }
+  }
+
+  async function openEditParty(partyId) {
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    var titleEl = document.getElementById('parties-edit-title');
+    var nameEl = document.getElementById('parties-edit-name');
+    var membersEl = document.getElementById('parties-members-list');
+    if (!listView || !editView || !titleEl || !nameEl || !membersEl) return;
+    editingPartyId = partyId;
+    titleEl.textContent = partyId ? 'Edit party' : 'New party';
+    nameEl.value = '';
+    membersEl.innerHTML = '';
+    if (partyId && supabaseClient) {
+      try {
+        var pRes = await supabaseClient.from('parties').select('name').eq('id', partyId).single();
+        if (!pRes.error && pRes.data) nameEl.value = pRes.data.name || '';
+        var mRes = await supabaseClient
+          .from('party_members')
+          .select('name,init_bonus,ac')
+          .eq('party_id', partyId)
+          .order('order_index', { ascending: true });
+        if (!mRes.error && mRes.data && mRes.data.length) {
+          mRes.data.forEach(function(m) {
+            appendPartyMemberRow(membersEl, m.name, m.init_bonus, m.ac);
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!membersEl.children.length) appendPartyMemberRow(membersEl, '', 0, null);
+    listView.style.display = 'none';
+    editView.style.display = 'block';
+  }
+
+  function appendPartyMemberRow(container, name, initBonus, ac) {
+    var row = document.createElement('div');
+    row.className = 'party-member-row';
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    row.style.marginBottom = '6px';
+    row.style.alignItems = 'center';
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Name';
+    nameInput.value = name || '';
+    nameInput.style.flex = '1';
+    nameInput.style.minWidth = '0';
+    nameInput.style.padding = '6px 8px';
+    nameInput.style.fontSize = '0.9rem';
+    var initInput = document.createElement('input');
+    initInput.type = 'number';
+    initInput.placeholder = 'Init';
+    initInput.value = (initBonus != null ? initBonus : '');
+    initInput.style.width = '56px';
+    initInput.style.padding = '6px 6px';
+    initInput.style.fontSize = '0.9rem';
+    var acInput = document.createElement('input');
+    acInput.type = 'number';
+    acInput.placeholder = 'AC';
+    acInput.value = (ac != null && ac !== '' ? ac : '');
+    acInput.style.width = '48px';
+    acInput.style.padding = '6px 6px';
+    acInput.style.fontSize = '0.9rem';
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'secondary';
+    removeBtn.style.padding = '6px 10px';
+    removeBtn.style.flexShrink = '0';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', function() {
+      if (container.children.length > 1) row.remove();
+    });
+    row.appendChild(nameInput);
+    row.appendChild(initInput);
+    row.appendChild(acInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  }
+
+  async function savePartyFromEdit() {
+    var nameEl = document.getElementById('parties-edit-name');
+    var membersEl = document.getElementById('parties-members-list');
+    if (!nameEl || !membersEl) return;
+    var partyName = (nameEl.value || '').trim() || 'Unnamed party';
+    var rows = [];
+    var memberRows = membersEl.querySelectorAll('.party-member-row');
+    for (var i = 0; i < memberRows.length; i++) {
+      var r = memberRows[i];
+      var inputs = r.querySelectorAll('input');
+      var nameInput = inputs[0];
+      var initInput = inputs[1];
+      var acInput = inputs[2];
+      var name = (nameInput && nameInput.value ? nameInput.value.trim() : '') || null;
+      if (!name) continue;
+      var initBonus = parseInt(initInput && initInput.value ? initInput.value : 0, 10);
+      if (isNaN(initBonus)) initBonus = 0;
+      var ac = (acInput && acInput.value && acInput.value.trim() !== '') ? parseInt(acInput.value, 10) : null;
+      if (ac !== null && isNaN(ac)) ac = null;
+      rows.push({ name: name, init_bonus: initBonus, ac: ac, order_index: i });
+    }
+    if (!rows.length) {
+      alert('Add at least one member with a name.');
+      return;
+    }
+    if (!supabaseClient) {
+      console.warn('Supabase not available');
+      return;
+    }
+    try {
+      var pid;
+      if (editingPartyId) {
+        await supabaseClient.from('parties').update({ name: partyName }).eq('id', editingPartyId);
+        await supabaseClient.from('party_members').delete().eq('party_id', editingPartyId);
+        pid = editingPartyId;
+      } else {
+        var pRes = await supabaseClient.from('parties').insert({ name: partyName }).select('id').single();
+        if (pRes.error) throw pRes.error;
+        pid = pRes.data.id;
+      }
+      var memberRowsToInsert = rows.map(function(r, i) {
+        return { party_id: pid, name: r.name, init_bonus: r.init_bonus, ac: r.ac, order_index: i };
+      });
+      var mRes = await supabaseClient.from('party_members').insert(memberRowsToInsert);
+      if (mRes.error) throw mRes.error;
+      var listView = document.getElementById('parties-list-view');
+      var editView = document.getElementById('parties-edit-view');
+      if (listView) listView.style.display = '';
+      if (editView) editView.style.display = 'none';
+      editingPartyId = null;
+      await renderPartiesList();
+    } catch (err) {
+      console.error('Failed to save party', err);
+      var msg = (err && (err.message || err.hint)) ? (err.message || '') + (err.hint ? ' ' + err.hint : '') : String(err);
+      alert('Failed to save party. ' + (msg ? msg : 'Check console.'));
+    }
+  }
+
+  function cancelPartyEdit() {
+    var listView = document.getElementById('parties-list-view');
+    var editView = document.getElementById('parties-edit-view');
+    if (listView) listView.style.display = '';
+    if (editView) editView.style.display = 'none';
+    editingPartyId = null;
+  }
+
+  // Expose selected functions for inline onclick handlers and parties panel
+  window.saveCurrentEncounter = saveCurrentEncounter;
+  window.openEncounterMenu = openEncounterMenu;
+  window.openPartiesMenu = openPartiesMenu;
+  window.openEditParty = openEditParty;
+  window.appendPartyMemberRow = appendPartyMemberRow;
+  window.savePartyFromEdit = savePartyFromEdit;
+  window.cancelPartyEdit = cancelPartyEdit;
+
+  // Use a stronger RNG for d20 rolls when available so streaks are less likely
+  function rollD20() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      var arr = new Uint32Array(1);
+      window.crypto.getRandomValues(arr);
+      return (arr[0] % 20) + 1;
+    }
+    return Math.floor(Math.random() * 20) + 1;
+  }
+
+  function renderCurrentTurnPanel() {
+    var panelOrder = document.getElementById('current-turn-order');
+    var nameEl = document.getElementById('current-turn-name');
+    var subtitleEl = document.getElementById('current-turn-subtitle');
+    var bodyEl = document.getElementById('current-turn-body');
+    if (!panelOrder || !nameEl || !subtitleEl || !bodyEl) return;
+
+    if (!combatants.length || activeCombatantIndex < 0 || activeCombatantIndex >= combatants.length) {
+      panelOrder.textContent = '';
+      nameEl.textContent = 'No active creature';
+      subtitleEl.textContent = 'Add creatures and roll initiative to begin.';
+      bodyEl.innerHTML = '';
+      return;
+    }
+
+    var c = combatants[activeCombatantIndex];
+    var orderText = (activeCombatantIndex + 1) + ' / ' + combatants.length;
+    panelOrder.textContent = orderText;
+    nameEl.textContent = c.name || '—';
+
+    var subtitle = 'Init ' + c.init + ' • AC ' + (c.ac != null ? c.ac : '—');
+    subtitleEl.textContent = subtitle;
+
+    var srd = c.srd;
+    if (!srd) {
+      bodyEl.innerHTML =
+        '<section>' +
+          '<strong class="label">Details</strong>' +
+          '<div>Manual creature (no SRD data attached).</div>' +
+        '</section>';
+      return;
+    }
+
+    function abilityBlock(label, score) {
+      if (score == null) return label + ' —';
+      var mod = Math.floor((score - 10) / 2);
+      var modStr = (mod >= 0 ? '+' + mod : String(mod));
+      return label + ' ' + score + ' ' + modStr;
+    }
+
+    var basics = [];
+    if (srd.size || srd.type) {
+      basics.push([srd.size, srd.type].filter(Boolean).join(' '));
+    }
+    if (srd.alignment) {
+      basics.push(srd.alignment);
+    }
+    if (srd.speed) {
+      var speedParts = [];
+      if (typeof srd.speed === 'string') {
+        speedParts.push(srd.speed);
+      } else {
+        for (var key in srd.speed) {
+          if (!srd.speed.hasOwnProperty(key)) continue;
+          speedParts.push(key + ' ' + srd.speed[key]);
+        }
+      }
+      if (speedParts.length) basics.push('Speed: ' + speedParts.join(', '));
+    }
+
+    var abilitiesRow =
+      '<div class="abilities-row">' +
+        '<span>' + abilityBlock('STR', srd.strength) + '</span>' +
+        '<span>' + abilityBlock('DEX', srd.dexterity) + '</span>' +
+        '<span>' + abilityBlock('CON', srd.constitution) + '</span>' +
+      '</div>' +
+      '<div class="abilities-row" style="margin-top:2px;">' +
+        '<span>' + abilityBlock('INT', srd.intelligence) + '</span>' +
+        '<span>' + abilityBlock('WIS', srd.wisdom) + '</span>' +
+        '<span>' + abilityBlock('CHA', srd.charisma) + '</span>' +
+      '</div>';
+
+    function listToHtml(arr, max) {
+      if (!arr || !arr.length) return '<div>—</div>';
+      var limit = typeof max === 'number' ? max : arr.length;
+      var html = '<ul>';
+      for (var i = 0; i < arr.length && i < limit; i++) {
+        var item = arr[i];
+        html += '<li><strong>' + (item.name || 'Action') + '.</strong> ' +
+          (item.desc || '') + '</li>';
+      }
+      if (arr.length > limit) {
+        html += '<li>… and ' + (arr.length - limit) + ' more.</li>';
+      }
+      html += '</ul>';
+      return html;
+    }
+
+    var senses = srd.senses ? Object.keys(srd.senses).map(function(k) {
+      return k.replace(/_/g, ' ') + ' ' + srd.senses[k];
+    }).join(', ') : '';
+
+    var skills = '';
+    var saves = '';
+    if (Array.isArray(srd.proficiencies)) {
+      var skillParts = [];
+      var saveParts = [];
+      srd.proficiencies.forEach(function(p) {
+        if (!p.proficiency || !p.proficiency.index) return;
+        var idx = p.proficiency.index;
+        if (idx.indexOf('skill-') === 0) {
+          var name = idx.replace('skill-', '').replace(/-/g, ' ');
+          name = name.replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
+          skillParts.push(name + ' +' + p.value);
+        } else if (idx.indexOf('saving-throw-') === 0) {
+          var abil = idx.replace('saving-throw-', '').toUpperCase();
+          saveParts.push(abil + ' +' + p.value);
+        }
+      });
+      skills = skillParts.join(', ');
+      saves = saveParts.join(', ');
+    }
+
+    var languages = srd.languages || '';
+    var cr = (srd.challenge_rating != null ? srd.challenge_rating : '');
+    var passive = (srd.senses && (srd.senses.passive_perception != null))
+      ? srd.senses.passive_perception
+      : null;
+
+    var dmgRes = (srd.damage_resistances || []).join(', ');
+    var dmgImm = (srd.damage_immunities || []).join(', ');
+    var dmgVuln = (srd.damage_vulnerabilities || []).join(', ');
+    var condImm = (srd.condition_immunities || []).map(function(ci) {
+      return ci.name || '';
+    }).filter(Boolean).join(', ');
+
+    var html = '';
+    html += '<section><strong class="label">Basics</strong>';
+    if (basics.length) {
+      html += '<div>' + basics.join('<br>') + '</div>';
+    } else {
+      html += '<div>—</div>';
+    }
+    html += '</section>';
+
+    html += '<section><strong class="label">Abilities</strong>' + abilitiesRow + '</section>';
+
+    html += '<section><strong class="label">Defenses & senses</strong>';
+    html += '<div>';
+    if (saves) html += 'Saves: ' + saves + '<br>';
+    if (skills) html += 'Skills: ' + skills + '<br>';
+    if (senses) html += 'Senses: ' + senses + '<br>';
+    if (passive != null) html += 'Passive Perception: ' + passive + '<br>';
+    if (dmgRes) html += 'Resistances: ' + dmgRes + '<br>';
+    if (dmgImm) html += 'Immunities: ' + dmgImm + '<br>';
+    if (dmgVuln) html += 'Vulnerabilities: ' + dmgVuln + '<br>';
+    if (condImm) html += 'Condition Immunities: ' + condImm + '<br>';
+    if (languages) html += 'Languages: ' + languages + '<br>';
+    if (cr !== '') html += 'CR: ' + cr;
+    if (!saves && !skills && !senses && passive == null && !dmgRes && !dmgImm && !dmgVuln && !condImm && !languages && cr === '') html += '—';
+    html += '</div></section>';
+
+    // Active conditions / concentration (from combat tracker state)
+    var activeConds = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
+    var concText = c.isConcentrating ? 'Concentrating' : '';
+    var statusPieces = [];
+    if (activeConds) statusPieces.push('Conditions: ' + activeConds);
+    if (concText) statusPieces.push(concText);
+    html += '<section><strong class="label">Status</strong><div>' +
+      (statusPieces.length ? statusPieces.join('<br>') : '—') +
+      '</div></section>';
+
+    html += '<section><strong class="label">Traits & features</strong>' +
+      listToHtml(srd.special_abilities || [], 6) + '</section>';
+
+    html += '<section><strong class="label">Actions</strong>' +
+      listToHtml(srd.actions || [], 10) + '</section>';
+
+    html += '<section><strong class="label">Reactions</strong>' +
+      listToHtml(srd.reactions || [], 6) + '</section>';
+
+    html += '<section><strong class="label">Legendary actions</strong>' +
+      listToHtml(srd.legendary_actions || [], 6) + '</section>';
+
+    bodyEl.innerHTML = html;
+  }
+
+  function createCombatantFromMonster(monster, query) {
+    if (!monster) return;
+    var name = monster.name || query;
+    var hp;
+    // If toggle is on and we have a roll expression, roll HP; otherwise use average
+    if (useRolledHp && typeof monster.hit_points_roll === 'string' && monster.hit_points_roll.length) {
+      hp = rollFromExpression(monster.hit_points_roll);
+    } else {
+      hp = (monster.hit_points != null ? monster.hit_points : 10);
+    }
+    var ac = (Array.isArray(monster.armor_class) && monster.armor_class.length
+      ? monster.armor_class[0].value
+      : (monster.armor_class && monster.armor_class.base) || 10);
+    var dexScore = (typeof monster.dexterity === 'number')
+      ? monster.dexterity
+      : 10;
+    var dexMod = Math.floor((dexScore - 10) / 2);
+    // Auto-roll initiative on add: 1d20 + Dex mod
+    var initRoll = rollD20();
+    var init = initRoll + dexMod;
+    combatants.push(Object.assign({
+      name: name,
+      init: init,
+      hp: hp,
+      maxHp: hp,
+      ac: ac,
+      dexMod: dexMod,
+      srd: monster
+    }, createEmptyStateForCombatant()));
+    sortCombatants();
+    if (activeCombatantIndex === -1) activeCombatantIndex = 0;
+    renderCombatants();
+  }
+
+  function addCombatantFromSrd(query) {
+    if (!query) return;
+    var q = query.trim();
+    if (!q) return;
+    var lower = q.toLowerCase();
+
+    // Try to reuse from cache by name match first (cheap scan, cache is small)
+    for (var key in srdMonsterCache) {
+      if (!srdMonsterCache.hasOwnProperty(key)) continue;
+      var cached = srdMonsterCache[key];
+      if (cached && cached.name && cached.name.toLowerCase() === lower) {
+        createCombatantFromMonster(cached, q);
+        return;
+      }
+    }
+
+    var url = 'https://www.dnd5eapi.co/api/monsters?name=' + encodeURIComponent(q);
+    fetch(url)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data.results || !data.results.length) return null;
+        var first = data.results[0];
+        // If we've already cached this exact index, reuse it
+        if (first.index && srdMonsterCache[first.index]) {
+          return srdMonsterCache[first.index];
+        }
+        return fetch('https://www.dnd5eapi.co' + first.url)
+          .then(function(res) { return res.json(); })
+          .then(function(monster) {
+            if (monster && first.index) {
+              srdMonsterCache[first.index] = monster;
+            }
+            return monster;
+          });
+      })
+      .then(function(monster) {
+        if (!monster) return;
+        createCombatantFromMonster(monster, q);
+      })
+      .catch(function() {
+        // fail silently if offline / CORS
+      });
+  }
+
+  function rollFromExpression(expr) {
+    // Supports patterns like "2d6", "8d10+16", "15d8-10"
+    if (typeof expr !== 'string') return 0;
+    var m = expr.trim().match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!m) return 0;
+    var count = parseInt(m[1], 10);
+    var sides = parseInt(m[2], 10);
+    var bonus = m[3] ? parseInt(m[3], 10) : 0;
+    if (!isFinite(count) || !isFinite(sides) || count <= 0 || sides <= 0) return 0;
+    var total = 0;
+    for (var i = 0; i < count; i++) {
+      total += 1 + Math.floor(Math.random() * sides);
+    }
+    total += bonus;
+    return total;
+  }
+
+  function renderMonsterList(filter) {
+    var listEl = document.getElementById('monster-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    var q = (filter || '').trim().toLowerCase();
+    var items = monsterIndex.slice();
+    items.sort(function(a, b) {
+      return a.name.localeCompare(b.name);
+    });
+    items.forEach(function(m) {
+      if (q && m.name.toLowerCase().indexOf(q) === -1 && m.index.toLowerCase().indexOf(q) === -1) {
+        return;
+      }
+      var li = document.createElement('li');
+      li.dataset.index = m.index;
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'name';
+      nameSpan.textContent = m.name;
+      var metaSpan = document.createElement('span');
+      metaSpan.className = 'meta';
+
+      var cached = srdMonsterCache[m.index];
+      if (cached && cached.challenge_rating != null) {
+        metaSpan.textContent = 'CR ' + cached.challenge_rating;
+      } else {
+        metaSpan.textContent = '';
+      }
+
+      li.appendChild(nameSpan);
+      li.appendChild(metaSpan);
+      li.addEventListener('click', function() {
+        addCombatantFromSrd(m.name);
+      });
+      listEl.appendChild(li);
+    });
+  }
+
+  function handleGestureAction(actionName) {
+    switch (actionName) {
+      case 'NEXT':
+        goToNextCombatant();
+        break;
+      case 'PREV':
+      case 'PREVIOUS':
+        goToPreviousCombatant();
+        break;
+      default:
+        break;
+    }
+  }
+
+  function loadMonsterIndex() {
+    fetch('https://www.dnd5eapi.co/api/monsters?limit=1000')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        monsterIndex = (data && data.results) ? data.results : [];
+        renderMonsterList('');
+      })
+      .catch(function() {
+        monsterIndex = [];
+      });
+  }
+
+  function getActionForGesture(name) {
+    if (DEFAULT_ACTIONS[name]) return DEFAULT_ACTIONS[name];
+    return (name || '').toUpperCase();
+  }
+
+  function resizeCanvas() {
+    var w = window.innerWidth, h = window.innerHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      ctx.clearRect(0, 0, w, h);
+    }
+  }
+  function clearCanvas() {
+    resizeCanvas();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Ramer-Douglas-Peucker: simplify path by removing points that don't deviate much (reduces wobble)
+  function perpendicularDistance(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1e-9;
+    return Math.abs((p.y - a.y) * dx - (p.x - a.x) * dy) / len;
+  }
+  function simplifyPath(points, tolerance) {
+    if (points.length <= 2) return points;
+    var first = points[0], last = points[points.length - 1];
+    var maxDist = 0, maxIdx = 0;
+    for (var i = 1; i < points.length - 1; i++) {
+      var d = perpendicularDistance(points[i], first, last);
+      if (d > maxDist) { maxDist = d; maxIdx = i; }
+    }
+    if (maxDist < tolerance) return [first, last];
+    var left = simplifyPath(points.slice(0, maxIdx + 1), tolerance);
+    var right = simplifyPath(points.slice(maxIdx), tolerance);
+    return left.slice(0, -1).concat(right);
+  }
+
+  // Catmull-Rom: one cubic Bezier segment from P1 to P2 using P0, P3 for tangents
+  function catmullRomToBezier(p0, p1, p2, p3) {
+    var cp1x = p1.x + (p2.x - p0.x) / 6;
+    var cp1y = p1.y + (p2.y - p0.y) / 6;
+    var cp2x = p2.x - (p3.x - p1.x) / 6;
+    var cp2y = p2.y - (p3.y - p1.y) / 6;
+    return { cp1: { x: cp1x, y: cp1y }, cp2: { x: cp2x, y: cp2y } };
+  }
+
+  // Draw simplified stroke: straight parts stay straight, curved parts drawn as smooth splines
+  function drawTrailCrisp(points) {
+    var pts = simplifyPath(points, 2.5);
+    if (pts.length < 2) return;
+    ctx.shadowColor = 'rgba(0, 122, 255, 0.35)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 2;
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 122, 255, 1)';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 2) {
+      ctx.lineTo(pts[1].x, pts[1].y);
+    } else {
+      for (var i = 0; i < pts.length - 1; i++) {
+        var p0 = pts[Math.max(0, i - 1)];
+        var p1 = pts[i];
+        var p2 = pts[i + 1];
+        var p3 = pts[Math.min(pts.length - 1, i + 2)];
+        var cr = catmullRomToBezier(p0, p1, p2, p3);
+        ctx.bezierCurveTo(cr.cp1.x, cr.cp1.y, cr.cp2.x, cr.cp2.y, p2.x, p2.y);
+      }
+    }
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+  }
+
+  // Draw stroke: macOS-style — one path, gradient along stroke for continuous ombre (no overlap darkening)
+  function drawTrailSmooth(points, opaque) {
+    if (points.length < 2) return;
+    var alpha, lineWidth, r0, g0, b0, r1, g1, b1;
+    if (opaque) {
+      alpha = 1;
+      lineWidth = 16;
+      r0 = 0; g0 = 122; b0 = 255;
+      r1 = 0; g1 = 122; b1 = 255;
+      ctx.shadowColor = 'rgba(0, 122, 255, 0.35)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 2;
+    } else {
+      alpha = 0.58;
+      lineWidth = 7.2;
+      r0 = 174; g0 = 199; b0 = 242;
+      r1 = 0; g1 = 122; b1 = 255;
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+    }
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    var n = points.length;
+    var x0 = points[0].x, y0 = points[0].y;
+    var x1 = points[n - 1].x, y1 = points[n - 1].y;
+    if (opaque) {
+      ctx.strokeStyle = 'rgba(0, 122, 255, 1)';
+    } else {
+      var grad = ctx.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0, 'rgba(' + r0 + ',' + g0 + ',' + b0 + ',' + alpha + ')');
+      grad.addColorStop(1, 'rgba(' + r1 + ',' + g1 + ',' + b1 + ',' + alpha + ')');
+      ctx.strokeStyle = grad;
+    }
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    var startX = x0, startY = y0;
+    for (var i = 0; i < n - 1; i++) {
+      var p0 = points[i];
+      var p1 = points[i + 1];
+      var midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
+      ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
+      startX = midX;
+      startY = midY;
+    }
+    ctx.quadraticCurveTo(points[n - 1].x, points[n - 1].y, points[n - 1].x, points[n - 1].y);
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+  }
+
+  function showFeedback(text, color, withQuestion) {
+    var el = document.getElementById('feedback-label');
+    el.textContent = text + (withQuestion ? ' ?' : '');
+    el.style.color = color;
+    el.classList.remove('fade-out');
+    el.classList.add('visible');
+    if (navigator.vibrate) navigator.vibrate(80);
+    setTimeout(function() {
+      el.classList.add('fade-out');
+      setTimeout(function() { el.classList.remove('visible', 'fade-out'); }, 500);
+    }, 300);
+  }
+  function showNoMatchFlash() {
+    canvas.classList.add('no-match-flash');
+    setTimeout(function() { canvas.classList.remove('no-match-flash'); }, 400);
+  }
+
+  function updateDebug() {
+    document.getElementById('debug-pointer').textContent = lastPointerType;
+    document.getElementById('debug-points').textContent = lastPointCount;
+    document.getElementById('debug-result').textContent = lastResultName;
+    document.getElementById('debug-score').textContent = lastResultScore;
+    document.getElementById('debug-time').textContent = lastRecognitionTime;
+  }
+
+  function onPointerDown(e) {
+    lastPointerType = e.pointerType || '—';
+    updateDebug();
+    // Only handle pen / stylus and (for desktop) right mouse button as gesture trigger.
+    // Left-click and normal taps should behave like regular UI interaction.
+    var t = e.target;
+    if (t && t.closest && (
+      t.closest('.panel') ||
+      t.closest('.panel-overlay') ||
+      t.closest('input, textarea, select, button') ||
+      t.closest('#monster-panel') ||
+      t.closest('#initiative-panel') ||
+      t.closest('#current-turn-panel')
+    )) {
+      // Let normal UI elements receive both pen and mouse events (for typing, clicking, etc.)
+      return;
+    }
+    // Pen = always gesture (unless above UI). Mouse = only right button (button === 2).
+    if (e.pointerType !== 'pen' && !(e.pointerType === 'mouse' && e.button === 2)) return;
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var y = e.clientY - rect.top;
+    strokePoints = [{ x: x, y: y }];
+    isDrawing = true;
+    if (clearTimeoutId) { clearTimeout(clearTimeoutId); clearTimeoutId = null; }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  function onPointerMove(e) {
+    if ((e.pointerType !== 'pen' && e.pointerType !== 'mouse') || !isDrawing) return;
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    strokePoints.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    clearCanvas();
+    drawTrailSmooth(strokePoints, false);
+  }
+  function onPointerUp(e) {
+    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+    e.preventDefault();
+    if (!isDrawing) return;
+    isDrawing = false;
+    lastPointCount = strokePoints.length;
+    updateDebug();
+
+    var pointsForRecognizer = strokePoints.map(function(p) { return new Point(p.x, p.y); });
+
+    if (recordMode && recordName.trim()) {
+      var nameToSave = recordName.trim();
+      recognizer.AddGesture(nameToSave, pointsForRecognizer);
+      saveCustomGestureRaw(nameToSave, pointsForRecognizer);
+      saveGestures(recognizer);
+      recordMode = false;
+      recordName = '';
+      document.getElementById('canvas').classList.remove('record-mode');
+      document.getElementById('record-label').classList.remove('visible');
+      document.getElementById('record-panel').classList.remove('visible');
+      document.getElementById('record-overlay').classList.remove('visible');
+      showFeedback('Saved: ' + nameToSave, '#007AFF', false);
+      clearTimeoutId = setTimeout(clearCanvas, 800);
+      return;
+    }
+
+    if (strokePoints.length < 10) {
+      clearTimeoutId = setTimeout(clearCanvas, 800);
+      return;
+    }
+
+    var t0 = performance.now();
+    var result = recognizer.Recognize(pointsForRecognizer);
+    var t1 = performance.now();
+    lastResultName = result.Name || '—';
+    lastResultScore = (result.Score != null ? result.Score.toFixed(3) : '—');
+    lastRecognitionTime = Math.round(t1 - t0);
+    updateDebug();
+
+    var score = result.Score;
+    var name = result.Name;
+
+    if (score > 0.75) {
+      clearCanvas();
+      drawTrailCrisp(strokePoints);
+      var actionName = getActionForGesture(name);
+      handleGestureAction(actionName);
+      showFeedback(actionName, '#007AFF', false);
+    } else if (score >= 0.5 && score <= 0.75) {
+      var maybeAction = getActionForGesture(name);
+      showFeedback(maybeAction, '#B85C00', true);
+    } else {
+      showNoMatchFlash();
+    }
+
+    clearTimeoutId = setTimeout(clearCanvas, 800);
+  }
+
+  // Listen at the window level so gestures work over all UI layers
+  window.addEventListener('pointerdown', onPointerDown, { passive: false });
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup', onPointerUp, { passive: false });
+  window.addEventListener('pointercancel', onPointerUp, { passive: false });
+  // Prevent default context menu when using right-click as a gesture trigger
+  window.addEventListener('contextmenu', function(e) {
+    if (e.pointerType === 'mouse') {
+      e.preventDefault();
+    }
+  });
+
+  document.getElementById('btn-record').addEventListener('click', function() {
+    recordMode = true;
+    recordName = '';
+    document.getElementById('record-name').value = '';
+    document.getElementById('canvas').classList.add('record-mode');
+    document.getElementById('record-label').classList.add('visible');
+    document.getElementById('record-panel').classList.add('visible');
+    document.getElementById('record-overlay').classList.add('visible');
+  });
+  document.getElementById('record-overlay').addEventListener('click', function() {
+    recordMode = false;
+    document.getElementById('canvas').classList.remove('record-mode');
+    document.getElementById('record-label').classList.remove('visible');
+    document.getElementById('record-panel').classList.remove('visible');
+    document.getElementById('record-overlay').classList.remove('visible');
+  });
+  document.getElementById('record-confirm').addEventListener('click', function() {
+    recordName = document.getElementById('record-name').value.trim();
+    if (!recordName) return;
+    document.getElementById('record-panel').classList.remove('visible');
+    document.getElementById('record-overlay').classList.remove('visible');
+  });
+
+  document.getElementById('btn-gestures').addEventListener('click', function() {
+    var list = document.getElementById('gesture-list');
+    list.innerHTML = '';
+    var defNames = defaultTemplates.map(function(t) { return t.name; });
+    recognizer.GetGestureNames().forEach(function(name) {
+      var li = document.createElement('li');
+      var isBuiltin = defNames.indexOf(name) !== -1;
+      li.innerHTML = '<span class="name">' + name + '</span><span class="action">' + getActionForGesture(name) + '</span>' +
+        (isBuiltin ? '' : '<button type="button" class="delete-btn" data-name="' + name + '">Delete</button>');
+      list.appendChild(li);
+      var btn = li.querySelector('.delete-btn');
+      if (btn) {
+        btn.addEventListener('click', function() {
+          recognizer.RemoveGestureByName(name, removeCustomGestureRaw);
+          saveGestures(recognizer);
+          li.remove();
+        });
+      }
+    });
+    document.getElementById('library-panel').classList.add('visible');
+    document.getElementById('library-overlay').classList.add('visible');
+  });
+  document.getElementById('library-overlay').addEventListener('click', function() {
+    document.getElementById('library-panel').classList.remove('visible');
+    document.getElementById('library-overlay').classList.remove('visible');
+  });
+
+  // Tracker panel wiring
+  (function initTrackerUI() {
+    var btnTracker = document.getElementById('btn-tracker');
+    var trackerPanel = document.getElementById('tracker-panel');
+    var trackerOverlay = document.getElementById('tracker-overlay');
+    var addBtn = document.getElementById('tracker-add');
+    var clearBtn = document.getElementById('tracker-clear');
+    var srdBtn = document.getElementById('tracker-srd-add');
+    var srdInput = document.getElementById('tracker-srd-query');
+    if (!btnTracker || !trackerPanel || !trackerOverlay) return;
+
+    btnTracker.addEventListener('click', function() {
+      trackerPanel.classList.add('visible');
+      trackerOverlay.classList.add('visible');
+    });
+    trackerOverlay.addEventListener('click', function() {
+      trackerPanel.classList.remove('visible');
+      trackerOverlay.classList.remove('visible');
+    });
+    if (addBtn) {
+      addBtn.addEventListener('click', function() {
+        addCombatantFromInputs();
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function() {
+        clearCombatants();
+      });
+    }
+    if (srdBtn && srdInput) {
+      srdBtn.addEventListener('click', function() {
+        var q = srdInput.value.trim();
+        if (!q) return;
+        addCombatantFromSrd(q);
+      });
+      srdInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var q = srdInput.value.trim();
+          if (!q) return;
+          addCombatantFromSrd(q);
+        }
+      });
+    }
+
+    var rollBtn = document.getElementById('roll-initiative-btn');
+    var clearInitBtn = document.getElementById('clear-initiative-btn');
+    var saveEncounterBtn = document.getElementById('save-encounter-btn');
+    var loadEncounterBtn = document.getElementById('load-encounter-btn');
+    if (rollBtn) {
+      rollBtn.addEventListener('click', function() {
+        rollInitiativeForAll();
+      });
+    }
+    if (clearInitBtn) {
+      clearInitBtn.addEventListener('click', function() {
+        clearCombatants();
+      });
+    }
+    if (saveEncounterBtn) {
+      saveEncounterBtn.addEventListener('click', function() {
+        saveCurrentEncounter();
+      });
+    }
+    if (loadEncounterBtn) {
+      loadEncounterBtn.addEventListener('click', function() {
+        openEncounterMenu();
+      });
+    }
+    var partiesBtn = document.getElementById('parties-btn');
+    if (partiesBtn) {
+      partiesBtn.addEventListener('click', function() {
+        openPartiesMenu();
+      });
+    }
+  })();
+
+  // Monster panel wiring (top-left)
+  (function initMonsterPanelUI() {
+    var filterEl = document.getElementById('monster-filter');
+    var manualBtn = document.getElementById('monster-manual-add');
+    var rollHpToggle = document.getElementById('monster-roll-hp-toggle');
+    if (filterEl) {
+      filterEl.addEventListener('input', function() {
+        renderMonsterList(filterEl.value);
+      });
+    }
+    if (manualBtn) {
+      manualBtn.addEventListener('click', function() {
+        addManualCombatantFromMonsterPanel();
+      });
+    }
+    if (rollHpToggle) {
+      rollHpToggle.addEventListener('change', function() {
+        useRolledHp = !!rollHpToggle.checked;
+      });
+    }
+    loadMonsterIndex();
+  })();
+
+  // Gesture menu wiring (centralized controls)
+  (function initGestureMenuUI() {
+    var btnMenu = document.getElementById('btn-gesture-menu');
+    var overlay = document.getElementById('gesture-menu-overlay');
+    var panel = document.getElementById('gesture-menu-panel');
+    var btnRecord = document.getElementById('gesture-menu-record');
+    var btnLibrary = document.getElementById('gesture-menu-library');
+    var btnToggleDebug = document.getElementById('gesture-menu-toggle-debug');
+    var legacyRecord = document.getElementById('btn-record');
+    var legacyGestures = document.getElementById('btn-gestures');
+
+    if (!btnMenu || !overlay || !panel) return;
+
+    function closeMenu() {
+      panel.classList.remove('visible');
+      overlay.classList.remove('visible');
+    }
+
+    btnMenu.addEventListener('click', function() {
+      panel.classList.add('visible');
+      overlay.classList.add('visible');
+    });
+
+    overlay.addEventListener('click', function() {
+      closeMenu();
+    });
+
+    if (btnRecord && legacyRecord) {
+      btnRecord.addEventListener('click', function() {
+        // Delegate to existing record button behavior
+        legacyRecord.click();
+        closeMenu();
+      });
+    }
+
+    if (btnLibrary && legacyGestures) {
+      btnLibrary.addEventListener('click', function() {
+        // Delegate to existing gestures button behavior
+        legacyGestures.click();
+        closeMenu();
+      });
+    }
+
+    if (btnToggleDebug) {
+      btnToggleDebug.addEventListener('click', function() {
+        var dbg = document.getElementById('debug-panel');
+        if (dbg) dbg.classList.toggle('visible');
+      });
+    }
+  })();
+
+  // Parties panel wiring
+  (function initPartiesPanelUI() {
+    var overlay = document.getElementById('parties-overlay');
+    var panel = document.getElementById('parties-panel');
+    var newBtn = document.getElementById('parties-new-btn');
+    var saveBtn = document.getElementById('parties-save-btn');
+    var cancelBtn = document.getElementById('parties-cancel-btn');
+    var addMemberBtn = document.getElementById('parties-add-member-btn');
+    if (overlay && panel) {
+      overlay.addEventListener('click', function() {
+        panel.classList.remove('visible');
+        overlay.classList.remove('visible');
+      });
+    }
+    if (newBtn) {
+      newBtn.addEventListener('click', function() {
+        window.openEditParty(null);
+      });
+    }
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        window.savePartyFromEdit();
+      });
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function() {
+        window.cancelPartyEdit();
+      });
+    }
+    if (addMemberBtn) {
+      addMemberBtn.addEventListener('click', function() {
+        var membersEl = document.getElementById('parties-members-list');
+        if (membersEl && window.appendPartyMemberRow) window.appendPartyMemberRow(membersEl, '', 0, null);
+      });
+    }
+  })();
+
+  // Encounter list panel wiring
+  (function initEncounterPanelUI() {
+    var overlay = document.getElementById('encounter-overlay');
+    var panel = document.getElementById('encounter-panel');
+    if (!overlay || !panel) return;
+
+    overlay.addEventListener('click', function() {
+      panel.classList.remove('visible');
+      overlay.classList.remove('visible');
+    });
+  })();
+
+  // Simple draggable panels with lock toggle
+  (function initDraggablePanels() {
+    var panels = [
+      { id: 'monster-panel', handleSelector: 'h3' },
+      { id: 'initiative-panel', handleSelector: '#initiative-panel-header' },
+      { id: 'current-turn-panel', handleSelector: '#current-turn-header' }
+    ];
+
+    var dragState = null;
+    var nextZ = 50; // base above initial CSS z-indexes
+
+    function onPointerDown(e, panel, handle) {
+      // Ignore drags that originate on interactive controls in the header
+      if (e.target && e.target.closest) {
+        if (e.target.closest('.panel-lock-btn') ||
+            e.target.closest('#initiative-panel-actions') ||
+            e.target.closest('#current-turn-header button')) {
+          return;
+        }
+      }
+      if (panel.getAttribute('data-locked') === 'true') return;
+      // Only left mouse or primary pointer
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      var rect = panel.getBoundingClientRect();
+      // Freeze current visual position into explicit left/top before removing transforms
+      panel.style.left = rect.left + 'px';
+      panel.style.top = rect.top + 'px';
+      panel.style.transform = 'none';
+      // Bring this panel to front
+      panel.style.zIndex = String(nextZ++);
+      dragState = {
+        panel: panel,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top
+      };
+    }
+
+    function onPointerMove(e) {
+      if (!dragState) return;
+      e.preventDefault();
+      var panel = dragState.panel;
+      var x = e.clientX - dragState.offsetX;
+      var y = e.clientY - dragState.offsetY;
+      panel.style.left = x + 'px';
+      panel.style.top = y + 'px';
+    }
+
+    function onPointerUp() {
+      dragState = null;
+    }
+
+    panels.forEach(function(cfg) {
+      var panel = document.getElementById(cfg.id);
+      if (!panel) return;
+      var handle = panel.querySelector(cfg.handleSelector);
+      if (!handle) return;
+      handle.addEventListener('pointerdown', function(e) { onPointerDown(e, panel, handle); });
+      // Also bring to front on simple click/tap anywhere in the panel
+      panel.addEventListener('mousedown', function() {
+        panel.style.zIndex = String(nextZ++);
+      });
+      panel.addEventListener('touchstart', function() {
+        panel.style.zIndex = String(nextZ++);
+      }, { passive: true });
+    });
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+
+    // Lock buttons
+    document.querySelectorAll('.panel-lock-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-panel-id');
+        var panel = document.getElementById(id);
+        if (!panel) return;
+        var locked = panel.getAttribute('data-locked') === 'true';
+        var next = (!locked).toString();
+        panel.setAttribute('data-locked', next);
+        if (next === 'true') {
+          panel.classList.add('panel-locked');
+          btn.textContent = '🔒';
+        } else {
+          panel.classList.remove('panel-locked');
+          btn.textContent = '🔓';
+        }
+      });
+    });
+  })();
+
+  document.getElementById('debug-toggle').addEventListener('click', function() {
+    document.getElementById('debug-panel').classList.toggle('visible');
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+  clearCanvas();
+})();
+  </script>
+</body>
+</html>
