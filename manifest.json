@@ -1,0 +1,9 @@
+{
+  "name": "D&D Tracker",
+  "short_name": "D&D Tracker",
+  "description": "D&D 5e initiative and encounter tracker",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "scope": "./"
+}
