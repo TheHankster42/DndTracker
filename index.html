@@ -235,8 +235,44 @@
     }
     table.initiative-table {
       width: 100%;
+      min-width: 644px;
       border-collapse: collapse;
       font-size: 0.8rem;
+      table-layout: fixed;
+    }
+    table.initiative-table th,
+    table.initiative-table td {
+      box-sizing: border-box;
+    }
+    table.initiative-table th:nth-child(1),
+    table.initiative-table td:nth-child(1) {
+      width: 32px !important;
+      min-width: 32px !important;
+      max-width: 32px !important;
+    }
+    table.initiative-table th:nth-child(2),
+    table.initiative-table td:nth-child(2) {
+      width: 220px !important;
+      min-width: 220px !important;
+      max-width: 220px !important;
+    }
+    table.initiative-table th:nth-child(3),
+    table.initiative-table td:nth-child(3) {
+      width: 48px !important;
+      min-width: 48px !important;
+      max-width: 48px !important;
+    }
+    table.initiative-table th:nth-child(4),
+    table.initiative-table td:nth-child(4) {
+      width: 44px !important;
+      min-width: 44px !important;
+      max-width: 44px !important;
+    }
+    table.initiative-table th:nth-child(5),
+    table.initiative-table td:nth-child(5) {
+      width: 300px !important;
+      min-width: 300px !important;
+      max-width: 300px !important;
     }
     table.initiative-table thead {
       background: rgba(242, 242, 247, 0.9);
@@ -249,12 +285,23 @@
       padding: 6px 8px;
       text-align: left;
       border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      vertical-align: middle;
+    }
+    table.initiative-table td:nth-child(1),
+    table.initiative-table td:nth-child(3),
+    table.initiative-table td:nth-child(4),
+    table.initiative-table td:nth-child(6) {
       white-space: nowrap;
-      vertical-align: middle; /* align all text to a common center line */
     }
     table.initiative-table th {
       font-weight: 600;
       color: #3a3a3c;
+    }
+    table.initiative-table tbody tr {
+      min-height: 72px;
+    }
+    table.initiative-table tbody td {
+      min-height: 72px;
     }
     table.initiative-table tbody tr.active {
       background: rgba(0, 122, 255, 0.14);
@@ -264,10 +311,21 @@
       background: rgba(0, 0, 0, 0.18);
     }
     table.initiative-table td.name-cell {
-      /* normal table-cell layout so borders/lines stay continuous */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 2em;
+      white-space: nowrap;
+    }
+    table.initiative-table td.hp-cell {
+      overflow: hidden;
     }
     .name-cell .name-text {
-      /* inline by default */
+      display: inline-block;
+      max-width: calc(100% - 20px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+      min-height: 1.2em;
     }
     .name-cell .name-death {
       display: inline-block;
@@ -283,7 +341,6 @@
     table.initiative-table td.hp-cell {
       font-weight: 500;
       vertical-align: top;
-      min-width: 110px;
     }
     .hp-editor {
       display: flex;
@@ -1091,6 +1148,14 @@
     </div>
     <div id="initiative-table-wrap">
       <table class="initiative-table">
+        <colgroup>
+          <col style="width:32px">
+          <col style="width:220px">
+          <col style="width:48px">
+          <col style="width:44px">
+          <col style="width:300px">
+          <col>
+        </colgroup>
         <thead>
           <tr>
             <th>#</th>
