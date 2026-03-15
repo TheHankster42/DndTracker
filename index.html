@@ -2732,14 +2732,27 @@
         '<span>' + abilityBlock('CHA', srd.charisma) + '</span>' +
       '</div>';
 
+    function formatUsage(usage) {
+      if (!usage || !usage.type) return '';
+      if (usage.type === 'recharge' || usage.type === 'recharge on roll') {
+        var min = usage.min_value;
+        var dice = usage.dice || '1d6';
+        var high = (dice === '1d6') ? 6 : dice;
+        return ' (Recharge ' + (min != null ? (min + '-' + high) : dice) + ')';
+      }
+      if (usage.type === 'per day' && usage.times != null) return ' (' + usage.times + '/day)';
+      if (usage.type === 'recharge after rest') return ' (Recharge after rest)';
+      return '';
+    }
     function listToHtml(arr, max) {
       if (!arr || !arr.length) return '<div>—</div>';
       var limit = typeof max === 'number' ? max : arr.length;
       var html = '<ul>';
       for (var i = 0; i < arr.length && i < limit; i++) {
         var item = arr[i];
-        html += '<li><strong>' + (item.name || 'Action') + '.</strong> ' +
-          (item.desc || '') + '</li>';
+        var usageStr = formatUsage(item.usage || item);
+        var namePart = (item.name || 'Action') + (usageStr ? ' <strong>' + usageStr + '</strong>' : '') + '.';
+        html += '<li><strong>' + namePart + '</strong> ' + (item.desc || '') + '</li>';
       }
       if (arr.length > limit) {
         html += '<li>… and ' + (arr.length - limit) + ' more.</li>';
@@ -2748,9 +2761,10 @@
       return html;
     }
 
-    var senses = srd.senses ? Object.keys(srd.senses).map(function(k) {
-      return k.replace(/_/g, ' ') + ' ' + srd.senses[k];
-    }).join(', ') : '';
+    var senses = srd.senses ? Object.keys(srd.senses)
+      .filter(function(k) { return k !== 'passive_perception'; })
+      .map(function(k) { return k.replace(/_/g, ' ') + ' ' + srd.senses[k]; })
+      .join(', ') : '';
 
     var skills = '';
     var saves = '';
@@ -2787,52 +2801,57 @@
     }).filter(Boolean).join(', ');
 
     var html = '';
-    html += '<section><strong class="label">Basics</strong>';
     if (basics.length) {
-      html += '<div>' + basics.join('<br>') + '</div>';
-    } else {
-      html += '<div>—</div>';
+      html += '<section><strong class="label">Basics</strong><div>' + basics.join('<br>') + '</div></section>';
     }
-    html += '</section>';
 
     html += '<section><strong class="label">Abilities</strong>' + abilitiesRow + '</section>';
 
-    html += '<section><strong class="label">Defenses & senses</strong>';
-    html += '<div>';
-    if (saves) html += 'Saves: ' + saves + '<br>';
-    if (skills) html += 'Skills: ' + skills + '<br>';
-    if (senses) html += 'Senses: ' + senses + '<br>';
-    if (passive != null) html += 'Passive Perception: ' + passive + '<br>';
-    if (dmgRes) html += 'Resistances: ' + dmgRes + '<br>';
-    if (dmgImm) html += 'Immunities: ' + dmgImm + '<br>';
-    if (dmgVuln) html += 'Vulnerabilities: ' + dmgVuln + '<br>';
-    if (condImm) html += 'Condition Immunities: ' + condImm + '<br>';
-    if (languages) html += 'Languages: ' + languages + '<br>';
-    if (cr !== '') html += 'CR: ' + cr;
-    if (!saves && !skills && !senses && passive == null && !dmgRes && !dmgImm && !dmgVuln && !condImm && !languages && cr === '') html += '—';
-    html += '</div></section>';
+    var hasDefenses = saves || skills || senses || passive != null || dmgRes || dmgImm || dmgVuln || condImm || languages || cr !== '';
+    if (hasDefenses) {
+      html += '<section><strong class="label">Defenses & senses</strong><div>';
+      if (saves) html += 'Saves: ' + saves + '<br>';
+      if (skills) html += 'Skills: ' + skills + '<br>';
+      if (senses) html += 'Senses: ' + senses + '<br>';
+      if (passive != null) html += 'Passive Perception: ' + passive + '<br>';
+      if (dmgRes) html += 'Resistances: ' + dmgRes + '<br>';
+      if (dmgImm) html += 'Immunities: ' + dmgImm + '<br>';
+      if (dmgVuln) html += 'Vulnerabilities: ' + dmgVuln + '<br>';
+      if (condImm) html += 'Condition Immunities: ' + condImm + '<br>';
+      if (languages) html += 'Languages: ' + languages + '<br>';
+      if (cr !== '') html += 'CR: ' + cr;
+      html += '</div></section>';
+    }
 
-    // Active conditions / concentration (from combat tracker state)
     var activeConds = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
     var concText = c.isConcentrating ? 'Concentrating' : '';
     var statusPieces = [];
     if (activeConds) statusPieces.push('Conditions: ' + activeConds);
     if (concText) statusPieces.push(concText);
-    html += '<section><strong class="label">Status</strong><div>' +
-      (statusPieces.length ? statusPieces.join('<br>') : '—') +
-      '</div></section>';
+    if (statusPieces.length) {
+      html += '<section><strong class="label">Status</strong><div>' + statusPieces.join('<br>') + '</div></section>';
+    }
 
-    html += '<section><strong class="label">Traits & features</strong>' +
-      listToHtml(srd.special_abilities || [], 6) + '</section>';
+    var specialAbilities = srd.special_abilities || [];
+    if (specialAbilities.length) {
+      html += '<section><strong class="label">Traits & features</strong>' + listToHtml(specialAbilities, 6) + '</section>';
+    }
 
-    html += '<section><strong class="label">Actions</strong>' +
-      listToHtml(srd.actions || [], 10) + '</section>';
+    var actions = srd.actions || [];
+    if (actions.length) {
+      html += '<section><strong class="label">Actions</strong>' + listToHtml(actions, 10) + '</section>';
+    }
 
-    html += '<section><strong class="label">Reactions</strong>' +
-      listToHtml(srd.reactions || [], 6) + '</section>';
+    var reactions = srd.reactions || [];
+    if (reactions.length) {
+      html += '<section><strong class="label">Reactions</strong>' + listToHtml(reactions, 6) + '</section>';
+    }
 
-    html += '<section><strong class="label">Legendary actions</strong>' +
-      listToHtml(srd.legendary_actions || [], 6) + '</section>';
+    var legActions = srd.legendary_actions || [];
+    if (legActions.length) {
+      var legIntro = '<p style="margin:0 0 6px 0; font-size:0.78rem;">The creature can take 3 legendary actions per turn, choosing from the options below.</p>';
+      html += '<section><strong class="label">Legendary actions</strong>' + legIntro + listToHtml(legActions, 6) + '</section>';
+    }
 
     bodyEl.innerHTML = html;
   }
