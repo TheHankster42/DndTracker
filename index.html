@@ -13,6 +13,15 @@
   <title>Gesture Shortcuts</title>
   <style>
     * { box-sizing: border-box; }
+    /* Hide both panels until JS has positioned monster panel, then show together (no flicker) */
+    body:not(.panels-ready) #initiative-panel,
+    body:not(.panels-ready) #monster-panel {
+      visibility: hidden;
+    }
+    body.panels-ready #initiative-panel,
+    body.panels-ready #monster-panel {
+      visibility: visible;
+    }
     html, body {
       margin: 0;
       padding: 0;
@@ -131,6 +140,7 @@
     #btn-tracker {
       display: none;
     }
+    /* Solid background (no backdrop-filter) so drag add/remove doesn't shift content */
     #initiative-panel {
       position: fixed;
       top: 10vh;
@@ -138,11 +148,10 @@
       transform: translateX(-50%);
       width: min(900px, 90vw);
       max-height: 70vh;
-      background: rgba(246, 246, 246, 0.94);
-      backdrop-filter: saturate(180%) blur(24px);
-      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      background: rgba(248, 248, 248, 0.98);
       border-radius: 14px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      /* Shadow biased right so it doesn't fall on the collapsed monster panel to the left */
+      box-shadow: 12px 10px 30px rgba(0, 0, 0, 0.18);
       padding: 14px 14px 16px;
       z-index: 35;
       display: flex;
@@ -150,6 +159,11 @@
       touch-action: manipulation;
       cursor: default;
     }
+    #initiative-panel.panel-dragging {
+      will-change: transform;
+      backface-visibility: hidden;
+    }
+    /* Slight down offset so bar always looks like pressed state (no shift down on mousedown / up on release) */
     #initiative-panel-header {
       display: flex;
       align-items: center;
@@ -157,33 +171,95 @@
       margin-bottom: 6px;
       padding: 10px 0;
       min-height: 44px;
+      height: 48px;
+      line-height: 1.25;
       cursor: grab;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
+      flex-wrap: nowrap;
+      overflow: hidden;
+      transform: translateY(1px);
     }
     #initiative-panel-header:active {
       cursor: grabbing;
     }
     #initiative-panel-header h3 {
-      margin: 0;
+      margin: 0 12px 0 0;
       padding: 0;
       font-size: 1.1rem;
       font-weight: 600;
       letter-spacing: -0.01em;
-      flex: 1;
-      min-width: 0;
+      line-height: 1.25;
+      flex: 1 1 auto;
+      /* Avoid min-width: 0 so Chrome does not shrink title and clip "Initiative" (Firefox keeps intrinsic min-width) */
+      min-width: min-content;
+      white-space: nowrap;
     }
     #initiative-panel-subtitle {
       margin-top: 4px;
+      margin-bottom: 0;
       font-size: 0.78rem;
+      line-height: 1.35;
       color: #6e6e73;
     }
     #initiative-panel-actions {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
       font-size: 0.78rem;
+      line-height: 1.25;
       color: #6e6e73;
+      flex-shrink: 0;
+      min-height: 28px;
+    }
+    #initiative-panel-actions button,
+    #initiative-panel-actions input,
+    #initiative-panel-actions span {
+      line-height: 1.25;
+    }
+    /* Same text level in Chrome and Firefox: strip native form styling and lock line-height */
+    #initiative-panel-actions button,
+    #initiative-panel #encounter-name-input {
+      -webkit-appearance: none;
+      appearance: none;
+      line-height: 20px;
+    }
+    #initiative-panel-actions button {
+      border-radius: 8px;
+    }
+    /* Lock button: clear visual difference when panel is locked vs unlocked */
+    #initiative-panel-actions .panel-lock-btn {
+      min-width: 36px;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    #initiative-panel.panel-locked #initiative-panel-actions .panel-lock-btn {
+      background: #007AFF;
+      border-color: #007AFF;
+      color: #fff;
+    }
+    #initiative-panel-actions .panel-minimize-btn,
+    #initiative-panel-actions #save-encounter-btn,
+    #initiative-panel-actions #load-encounter-btn,
+    #initiative-panel-actions #parties-btn,
+    #initiative-panel-actions #clear-initiative-btn {
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    /* Firefox: prevent focus/active ring from changing header bar height when clicking to drag */
+    #initiative-panel-actions button:focus,
+    #initiative-panel-actions input:focus {
+      outline: none;
+    }
+    #initiative-panel-actions button:-moz-focusring,
+    #initiative-panel-actions input:-moz-focusring {
+      outline: none;
+    }
+    #initiative-panel-actions button:focus-visible,
+    #initiative-panel-actions input:focus-visible {
+      outline: 2px solid #007AFF;
+      outline-offset: 2px;
     }
     #save-encounter-btn {
       width: 64px; /* fixed so Save / Saving… / Saved / Error don't resize */
@@ -873,11 +949,10 @@
       line-height: 1.35;
     }
     .stat-block-overlay #stat-block-overlay-content {
-      margin-bottom: 12px;
+      margin-bottom: 0;
     }
     .stat-block-overlay #stat-block-overlay-close {
-      display: block;
-      width: 100%;
+      display: none;
     }
     #current-turn-body section {
       margin-bottom: 8px;
@@ -1186,7 +1261,6 @@
         <button type="button" id="parties-btn" class="secondary" style="font-size:0.75rem;">Parties</button>
         <button type="button" id="roll-initiative-btn">Roll initiative</button>
         <button type="button" id="clear-initiative-btn">Clear all</button>
-        <span>Arrow ➜ next turn · Line ↕ show panel</span>
       </div>
     </div>
     <div id="initiative-panel-subtitle">
@@ -3894,7 +3968,10 @@
         turnPanel.classList.add('pinned');
         currentTurnPanelCollapsed = false;
         turnPanel.classList.remove('collapsed');
-        updatePinnedPanelPosition();
+        /* Defer so layout has applied (pinned/collapsed) before we read rects */
+        requestAnimationFrame(function() {
+          requestAnimationFrame(updatePinnedPanelPosition);
+        });
         turnPanel.addEventListener('click', pinnedPanelClickHandler);
         pinnedPanelDragHandler = function(e) {
           if (e.target.closest('button, input, select')) return;
@@ -3907,6 +3984,7 @@
         turnPanel.classList.remove('pinned', 'collapsed');
         turnPanel.style.width = '';
         turnPanel.style.right = 'auto';
+        /* Leave left/top as-is so panel stays where it was released */
         turnPanel.removeEventListener('click', pinnedPanelClickHandler);
         if (pinnedPanelDragHandler) {
           turnPanel.removeEventListener('pointerdown', pinnedPanelDragHandler);
@@ -3926,7 +4004,18 @@
       if (panel.getAttribute('data-locked') === 'true') return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
+      /* Firefox: blur focus so focus ring doesn't change header height when dragging init panel */
+      if (panel.id === 'initiative-panel') {
+        var active = document.activeElement;
+        if (active && typeof active.blur === 'function' && handle.contains(active)) active.blur();
+        requestAnimationFrame(function() {
+          active = document.activeElement;
+          if (active && typeof active.blur === 'function' && handle.contains(active)) active.blur();
+        });
+      }
       var rect = panel.getBoundingClientRect();
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
       panel.style.left = rect.left + 'px';
       panel.style.top = rect.top + 'px';
       panel.style.transform = 'none';
@@ -3944,6 +4033,7 @@
         startLeft: panel.style.left ? parseFloat(panel.style.left) : rect.left,
         startTop: panel.style.top ? parseFloat(panel.style.top) : rect.top
       };
+      panel.classList.add('panel-dragging');
     }
 
     function onPointerMove(e) {
@@ -3952,8 +4042,12 @@
       var panel = dragState.panel;
       var x = e.clientX - dragState.offsetX;
       var y = e.clientY - dragState.offsetY;
-      panel.style.left = x + 'px';
-      panel.style.top = y + 'px';
+      /* Whole-pixel transform avoids subpixel text/button reflow; transform keeps layout stable */
+      var dx = Math.round(x - dragState.startLeft);
+      var dy = Math.round(y - dragState.startTop);
+      panel.style.left = dragState.startLeft + 'px';
+      panel.style.top = dragState.startTop + 'px';
+      panel.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
       if (dragState.originalId === 'initiative-panel') {
         if (currentTurnPanelPinned) updatePinnedPanelPosition();
         updateMonsterPanelPosition();
@@ -4022,8 +4116,8 @@
         var turnPanel = document.getElementById('current-turn-panel');
         var panelRect = turnPanel.getBoundingClientRect();
         if (currentTurnPanelPinned) {
-          var dx = Math.abs(parseFloat(turnPanel.style.left || 0) - (dragState.startLeft || 0));
-          var dy = Math.abs(parseFloat(turnPanel.style.top || 0) - (dragState.startTop || 0));
+          var dx = Math.abs(panelRect.left - (dragState.startLeft || 0));
+          var dy = Math.abs(panelRect.top - (dragState.startTop || 0));
           if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
             currentTurnPanelCollapsed = !currentTurnPanelCollapsed;
             if (currentTurnPanelCollapsed) {
@@ -4032,7 +4126,9 @@
               turnPanel.classList.remove('collapsed');
               if (window.renderCurrentTurnPanel) window.renderCurrentTurnPanel();
             }
-            updatePinnedPanelPosition();
+            requestAnimationFrame(function() {
+              requestAnimationFrame(updatePinnedPanelPosition);
+            });
           } else {
             pinnedJustDragged = true;
             if (!canStayPinned(panelRect)) {
@@ -4049,14 +4145,16 @@
         var monsterPanel = document.getElementById('monster-panel');
         if (monsterPanel) {
           var panelRect = monsterPanel.getBoundingClientRect();
-          var dx = Math.abs(parseFloat(monsterPanel.style.left || 0) - (dragState.startLeft || 0));
-          var dy = Math.abs(parseFloat(monsterPanel.style.top || 0) - (dragState.startTop || 0));
+          var dx = Math.abs(panelRect.left - (dragState.startLeft || 0));
+          var dy = Math.abs(panelRect.top - (dragState.startTop || 0));
           if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
             if (monsterPanelPinned) {
               monsterPanelCollapsed = !monsterPanelCollapsed;
               if (monsterPanelCollapsed) {
                 monsterPanel.classList.add('collapsed');
-                updateMonsterPanelPosition();
+                requestAnimationFrame(function() {
+                  requestAnimationFrame(updateMonsterPanelPosition);
+                });
                 monsterPanelDragHandler = function(e) {
                   if (e.target.closest('button, input, select')) return;
                   if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -4066,7 +4164,9 @@
                 monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
               } else {
                 monsterPanel.classList.remove('collapsed');
-                updateMonsterPanelPosition();
+                requestAnimationFrame(function() {
+                  requestAnimationFrame(updateMonsterPanelPosition);
+                });
                 if (monsterPanelDragHandler) {
                   monsterPanel.removeEventListener('pointerdown', monsterPanelDragHandler);
                   monsterPanelDragHandler = null;
@@ -4077,10 +4177,17 @@
             monsterJustDragged = true;
             if (monsterPanelNearInit(panelRect)) {
               monsterPanelPinned = true;
-              updateMonsterPanelPosition();
+              monsterPanel.classList.add('pinned');
+              requestAnimationFrame(function() {
+                requestAnimationFrame(updateMonsterPanelPosition);
+              });
             } else {
               monsterPanelPinned = false;
-              if (monsterPanel) monsterPanel.classList.remove('pinned');
+              if (monsterPanel) {
+                monsterPanel.classList.remove('pinned');
+                monsterPanel.style.right = 'auto';
+                /* Leave left/top for commit so panel stays where released */
+              }
               if (monsterPanelCollapsed) {
                 monsterPanelCollapsed = false;
                 monsterPanel.classList.remove('collapsed');
@@ -4092,6 +4199,15 @@
             }
           }
         }
+      }
+      /* Commit drag position (read rect while still dragging so no jump), then clear dragging state */
+      if (dragState && dragState.panel) {
+        var panel = dragState.panel;
+        var rect = panel.getBoundingClientRect();
+        panel.style.left = rect.left + 'px';
+        panel.style.top = rect.top + 'px';
+        panel.style.transform = 'none';
+        panel.classList.remove('panel-dragging');
       }
       dragState = null;
     }
@@ -4125,11 +4241,13 @@
 
     (function initMonsterPanelDefaultCollapsed() {
       var monsterPanel = document.getElementById('monster-panel');
-      if (!monsterPanel) return;
+      if (!monsterPanel) {
+        document.body.classList.add('panels-ready');
+        return;
+      }
       monsterPanel.classList.add('collapsed');
-      requestAnimationFrame(function() {
-        updateMonsterPanelPosition();
-      });
+      updateMonsterPanelPosition();
+      document.body.classList.add('panels-ready');
       monsterPanelDragHandler = function(e) {
         if (e.target.closest('button, input, select')) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -4140,10 +4258,19 @@
     })();
 
     // Lock buttons
+    function updateLockButtonLabel(btn, panel) {
+      var locked = panel.getAttribute('data-locked') === 'true';
+      var label = locked ? 'Unlock' : 'Lock';
+      var panelName = panel.id === 'initiative-panel' ? 'initiative panel' : panel.id === 'current-turn-panel' ? 'current turn panel' : 'panel';
+      btn.setAttribute('aria-label', label + ' ' + panelName);
+      btn.setAttribute('title', locked ? 'Locked – click to unlock' : 'Unlocked – click to lock');
+    }
     document.querySelectorAll('.panel-lock-btn').forEach(function(btn) {
+      var id = btn.getAttribute('data-panel-id');
+      var panel = document.getElementById(id);
+      if (panel) updateLockButtonLabel(btn, panel);
       btn.addEventListener('click', function() {
-        var id = btn.getAttribute('data-panel-id');
-        var panel = document.getElementById(id);
+        var panel = document.getElementById(btn.getAttribute('data-panel-id'));
         if (!panel) return;
         var locked = panel.getAttribute('data-locked') === 'true';
         var next = (!locked).toString();
@@ -4155,6 +4282,7 @@
           panel.classList.remove('panel-locked');
           btn.textContent = '🔓';
         }
+        updateLockButtonLabel(btn, panel);
       });
     });
 
@@ -4191,7 +4319,9 @@
           monsterPanel.classList.add('pinned');
           monsterPanelCollapsed = true;
           monsterPanel.classList.add('collapsed');
-          updateMonsterPanelPosition();
+          requestAnimationFrame(function() {
+            requestAnimationFrame(updateMonsterPanelPosition);
+          });
           monsterPanelDragHandler = function(ev) {
             if (ev.target.closest('button, input, select')) return;
             if (ev.pointerType === 'mouse' && ev.button !== 0) return;
@@ -4207,7 +4337,7 @@
           setPinned(true);
           currentTurnPanelCollapsed = true;
           turnPanel.classList.add('collapsed');
-          updatePinnedPanelPosition();
+          /* Position update already scheduled in setPinned (deferred for correct layout) */
         } else if (id === 'initiative-panel') {
           if (initiativePanelMinimized) return;
           setInitiativeMinimized(true);
