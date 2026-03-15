@@ -520,6 +520,53 @@
     #monster-panel h3:active {
       cursor: grabbing;
     }
+    #monster-panel.pinned .panel-lock-btn {
+      display: none;
+    }
+    #monster-panel.collapsed {
+      width: 44px;
+      min-width: 44px;
+      max-width: 44px;
+      height: 80px;
+      min-height: 80px;
+      max-height: 80px;
+      padding: 8px 6px;
+      cursor: pointer;
+      justify-content: center;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    #monster-panel.collapsed:hover {
+      background: #fff;
+      box-shadow: 0 2px 12px rgba(0, 122, 255, 0.2);
+    }
+    #monster-panel.collapsed h3,
+    #monster-panel.collapsed #monster-filter,
+    #monster-panel.collapsed #monster-list-wrap,
+    #monster-panel.collapsed #monster-manual,
+    #monster-panel.collapsed > div {
+      display: none !important;
+    }
+    #monster-panel.collapsed .monster-panel-collapsed-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.8);
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(-180deg);
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    #monster-panel:not(.collapsed) .monster-panel-collapsed-label {
+      display: none;
+    }
+    .monster-panel-collapsed-label {
+      display: none;
+    }
     #monster-filter {
       width: 100%;
       padding: 6px 8px;
@@ -1000,7 +1047,8 @@
     <div id="record-label" class="record-label">Draw your gesture now</div>
     <div id="feedback-label"></div>
   </div>
-  <div id="monster-panel" data-draggable="true" data-locked="false">
+  <div id="monster-panel" class="collapsed" data-draggable="true" data-locked="false">
+    <span class="monster-panel-collapsed-label" aria-hidden="true">Monsters</span>
     <h3>
       <span>Monsters</span>
       <button type="button" class="panel-lock-btn" data-panel-id="monster-panel" aria-label="Lock monsters panel">🔓</button>
@@ -3417,7 +3465,41 @@
     var currentTurnPanelCollapsed = false;
     var pinnedPanelDragHandler = null;
     var pinnedJustDragged = false;
+    var monsterPanelCollapsed = true;
+    var monsterPanelPinned = true;
+    var monsterPanelDragHandler = null;
+    var monsterJustDragged = false;
     var CLICK_THRESHOLD = 10;
+    var MONSTER_PANEL_GAP = 8;
+    var MONSTER_PIN_DISTANCE = 80;
+
+    function monsterPanelNearInit(monsterRect) {
+      var initPanel = document.getElementById('initiative-panel');
+      if (!initPanel) return false;
+      var initRect = initPanel.getBoundingClientRect();
+      var gap = initRect.left - monsterRect.right;
+      var verticalOverlap = monsterRect.top < initRect.bottom && monsterRect.bottom > initRect.top;
+      return verticalOverlap && gap >= -MONSTER_PIN_DISTANCE && gap <= MONSTER_PIN_DISTANCE;
+    }
+
+    function updateMonsterPanelPosition() {
+      var monsterPanel = document.getElementById('monster-panel');
+      if (monsterPanel) {
+        if (monsterPanelPinned) monsterPanel.classList.add('pinned');
+        else monsterPanel.classList.remove('pinned');
+      }
+      if (!monsterPanelPinned) return;
+      var initPanel = document.getElementById('initiative-panel');
+      if (!monsterPanel || !initPanel) return;
+      var initRect = initPanel.getBoundingClientRect();
+      var monsterRect = monsterPanel.getBoundingClientRect();
+      var w = monsterRect.width;
+      monsterPanel.style.left = (initRect.left - w - MONSTER_PANEL_GAP) + 'px';
+      monsterPanel.style.top = initRect.top + 'px';
+      monsterPanel.style.right = 'auto';
+      var initZ = parseInt(initPanel.style.zIndex || '0', 10) || 50;
+      monsterPanel.style.zIndex = String(Math.max(initZ - 1, 34));
+    }
 
 
     function rectsOverlap(a, b) {
@@ -3585,8 +3667,9 @@
       var y = e.clientY - dragState.offsetY;
       panel.style.left = x + 'px';
       panel.style.top = y + 'px';
-      if (dragState.originalId === 'initiative-panel' && currentTurnPanelPinned) {
-        updatePinnedPanelPosition();
+      if (dragState.originalId === 'initiative-panel') {
+        if (currentTurnPanelPinned) updatePinnedPanelPosition();
+        updateMonsterPanelPosition();
       }
     }
 
@@ -3675,6 +3758,54 @@
           setPinned(true);
         }
       }
+      if (dragState && dragState.originalId === 'monster-panel') {
+        var monsterPanel = document.getElementById('monster-panel');
+        if (monsterPanel) {
+          var panelRect = monsterPanel.getBoundingClientRect();
+          var dx = Math.abs(parseFloat(monsterPanel.style.left || 0) - (dragState.startLeft || 0));
+          var dy = Math.abs(parseFloat(monsterPanel.style.top || 0) - (dragState.startTop || 0));
+          if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
+            if (monsterPanelPinned) {
+              monsterPanelCollapsed = !monsterPanelCollapsed;
+              if (monsterPanelCollapsed) {
+                monsterPanel.classList.add('collapsed');
+                updateMonsterPanelPosition();
+                monsterPanelDragHandler = function(e) {
+                  if (e.target.closest('button, input, select')) return;
+                  if (e.pointerType === 'mouse' && e.button !== 0) return;
+                  e.preventDefault();
+                  onPointerDown(e, monsterPanel, monsterPanel);
+                };
+                monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+              } else {
+                monsterPanel.classList.remove('collapsed');
+                updateMonsterPanelPosition();
+                if (monsterPanelDragHandler) {
+                  monsterPanel.removeEventListener('pointerdown', monsterPanelDragHandler);
+                  monsterPanelDragHandler = null;
+                }
+              }
+            }
+          } else {
+            monsterJustDragged = true;
+            if (monsterPanelNearInit(panelRect)) {
+              monsterPanelPinned = true;
+              updateMonsterPanelPosition();
+            } else {
+              monsterPanelPinned = false;
+              if (monsterPanel) monsterPanel.classList.remove('pinned');
+              if (monsterPanelCollapsed) {
+                monsterPanelCollapsed = false;
+                monsterPanel.classList.remove('collapsed');
+                if (monsterPanelDragHandler) {
+                  monsterPanel.removeEventListener('pointerdown', monsterPanelDragHandler);
+                  monsterPanelDragHandler = null;
+                }
+              }
+            }
+          }
+        }
+      }
       dragState = null;
     }
 
@@ -3704,6 +3835,22 @@
 
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+
+    (function initMonsterPanelDefaultCollapsed() {
+      var monsterPanel = document.getElementById('monster-panel');
+      if (!monsterPanel) return;
+      monsterPanel.classList.add('collapsed');
+      requestAnimationFrame(function() {
+        updateMonsterPanelPosition();
+      });
+      monsterPanelDragHandler = function(e) {
+        if (e.target.closest('button, input, select')) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        onPointerDown(e, monsterPanel, monsterPanel);
+      };
+      monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+    })();
 
     // Lock buttons
     document.querySelectorAll('.panel-lock-btn').forEach(function(btn) {
