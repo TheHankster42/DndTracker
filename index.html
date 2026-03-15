@@ -616,7 +616,8 @@
     #monster-panel h3:active {
       cursor: grabbing;
     }
-    #monster-panel.pinned .panel-lock-btn {
+    #monster-panel.pinned .panel-lock-btn,
+    #monster-panel.pinned .panel-minimize-btn {
       display: none;
     }
     #monster-panel.collapsed {
@@ -791,9 +792,13 @@
       font-size: 0.78rem;
       line-height: 1.35;
     }
-    /* Pinned: hide "Current turn" and lock; show only creature content */
+    /* Pinned: hide "Current turn" and lock/minimize; show only creature content. No unpin button – drag panel away to unpin. */
     #current-turn-panel.pinned #current-turn-header {
-      display: none;
+      display: none !important;
+    }
+    #current-turn-panel.pinned .panel-lock-btn,
+    #current-turn-panel.pinned .panel-minimize-btn {
+      display: none !important;
     }
     #current-turn-panel.pinned {
       cursor: pointer;
@@ -1148,6 +1153,7 @@
     <h3>
       <span>Monsters</span>
       <button type="button" class="panel-lock-btn" data-panel-id="monster-panel" aria-label="Lock monsters panel">🔓</button>
+      <button type="button" class="panel-minimize-btn" data-panel-id="monster-panel" aria-label="Minimize">−</button>
     </h3>
     <input type="text" id="monster-filter" placeholder="Search SRD (goblin, dragon...)" />
     <div style="margin:4px 0 6px 0; font-size:0.78rem; color:#555;">
@@ -1173,13 +1179,14 @@
       <h3>Initiative</h3>
       <div id="initiative-panel-actions">
         <button type="button" class="panel-lock-btn" data-panel-id="initiative-panel" aria-label="Lock initiative panel">🔓</button>
+        <button type="button" class="panel-minimize-btn" data-panel-id="initiative-panel" aria-label="Minimize">−</button>
         <input type="text" id="encounter-name-input" placeholder="Encounter name" />
         <button type="button" id="save-encounter-btn" class="secondary" style="font-size:0.75rem;">Save</button>
         <button type="button" id="load-encounter-btn" class="secondary" style="font-size:0.75rem;">Load</button>
         <button type="button" id="parties-btn" class="secondary" style="font-size:0.75rem;">Parties</button>
         <button type="button" id="roll-initiative-btn">Roll initiative</button>
         <button type="button" id="clear-initiative-btn">Clear all</button>
-        <span>Arrow gesture ➜ next turn</span>
+        <span>Arrow ➜ next turn · Line ↕ show panel</span>
       </div>
     </div>
     <div id="initiative-panel-subtitle">
@@ -1214,6 +1221,7 @@
     <div id="current-turn-header">
       <h3>Current turn</h3>
       <button type="button" class="panel-lock-btn" data-panel-id="current-turn-panel" aria-label="Lock current turn panel">🔓</button>
+      <button type="button" class="panel-minimize-btn" data-panel-id="current-turn-panel" aria-label="Minimize">−</button>
       <span style="font-size:0.75rem;color:#6e6e73;" id="current-turn-order"></span>
     </div>
     <span class="current-turn-collapsed-label" aria-hidden="true">Stats</span>
@@ -1500,7 +1508,12 @@
         for (var i = 1; i <= 15; i++) pts.push(new Point(30 + (220 - 30) * i / 15, 220));
         return pts;
       })() },
-    { name: 'arrow', points: [new Point(68,222),new Point(70,220),new Point(73,218),new Point(75,217),new Point(77,215),new Point(80,213),new Point(82,212),new Point(84,210),new Point(87,209),new Point(89,208),new Point(92,206),new Point(95,204),new Point(101,201),new Point(106,198),new Point(112,194),new Point(118,191),new Point(124,187),new Point(127,186),new Point(132,183),new Point(138,181),new Point(141,180),new Point(146,178),new Point(154,173),new Point(159,171),new Point(161,170),new Point(166,167),new Point(168,167),new Point(171,166),new Point(174,164),new Point(177,162),new Point(180,160),new Point(182,158),new Point(183,156),new Point(181,154),new Point(178,153),new Point(171,153),new Point(164,153),new Point(160,153),new Point(150,154),new Point(147,155),new Point(141,157),new Point(137,158),new Point(135,158),new Point(137,158),new Point(140,157),new Point(143,156),new Point(151,154),new Point(160,152),new Point(170,149),new Point(179,147),new Point(185,145),new Point(192,144),new Point(196,144),new Point(198,144),new Point(200,144),new Point(201,147),new Point(199,149),new Point(194,157),new Point(191,160),new Point(186,167),new Point(180,176),new Point(177,179),new Point(171,187),new Point(169,189),new Point(165,194),new Point(164,196)] }
+    { name: 'arrow', points: [new Point(68,222),new Point(70,220),new Point(73,218),new Point(75,217),new Point(77,215),new Point(80,213),new Point(82,212),new Point(84,210),new Point(87,209),new Point(89,208),new Point(92,206),new Point(95,204),new Point(101,201),new Point(106,198),new Point(112,194),new Point(118,191),new Point(124,187),new Point(127,186),new Point(132,183),new Point(138,181),new Point(141,180),new Point(146,178),new Point(154,173),new Point(159,171),new Point(161,170),new Point(166,167),new Point(168,167),new Point(171,166),new Point(174,164),new Point(177,162),new Point(180,160),new Point(182,158),new Point(183,156),new Point(181,154),new Point(178,153),new Point(171,153),new Point(164,153),new Point(160,153),new Point(150,154),new Point(147,155),new Point(141,157),new Point(137,158),new Point(135,158),new Point(137,158),new Point(140,157),new Point(143,156),new Point(151,154),new Point(160,152),new Point(170,149),new Point(179,147),new Point(185,145),new Point(192,144),new Point(196,144),new Point(198,144),new Point(200,144),new Point(201,147),new Point(199,149),new Point(194,157),new Point(191,160),new Point(186,167),new Point(180,176),new Point(177,179),new Point(171,187),new Point(169,189),new Point(165,194),new Point(164,196)] },
+    { name: 'line', points: (function() {
+        var pts = [];
+        for (var i = 0; i <= 32; i++) pts.push(new Point(125, 25 + (225 - 25) * i / 32));
+        return pts;
+      })() }
   ];
 
   var DEFAULT_ACTIONS = {
@@ -1509,11 +1522,12 @@
     x: 'DELETE',
     z: 'UNDO (Z)',
     arrow: 'NEXT',
-    G: 'G'
+    G: 'G',
+    line: 'SHOW_INITIATIVE'
   };
   // When best and second-best scores are within AMBIGUITY_MARGIN, prefer the gesture that appears earlier here (gesture names, not actions)
   // G before circle, arrow before x, to reduce conflicts
-  var GESTURE_PRIORITY = ['arrow', 'G', 'checkmark', 'circle', 'x', 'z'];
+  var GESTURE_PRIORITY = ['arrow', 'G', 'line', 'checkmark', 'circle', 'x', 'z'];
   // Require higher confidence for easily confused gestures (circle/x need to be clear; G has no extra bar so it can recognize)
   var GESTURE_MIN_SCORE = { 'circle': 0.79, 'x': 0.78, 'checkmark': 0.76 };
   var AMBIGUITY_MARGIN = 0.08; // G vs circle, arrow vs x: when this close, use priority above
@@ -3148,6 +3162,9 @@
       case 'G':
         openGestureMenu();
         break;
+      case 'SHOW_INITIATIVE':
+        if (window.showInitiativePanel) window.showInitiativePanel();
+        break;
       default:
         break;
     }
@@ -3391,6 +3408,44 @@
     }
 
     if (strokePoints.length < 10) {
+      clearTimeoutId = setTimeout(clearCanvas, 800);
+      return;
+    }
+
+    // Direct line detection: vertical or horizontal stroke (works when $1 matches arrow/x instead)
+    var lineDetected = (function() {
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (var i = 0; i < strokePoints.length; i++) {
+        var p = strokePoints[i];
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+      var w = maxX - minX, h = maxY - minY;
+      if (w < 2 && h < 2) return false;
+      var aspect = w > h ? w / (h || 1) : h / (w || 1);
+      if (aspect < 2) return false;
+      var len = 0;
+      for (var j = 1; j < strokePoints.length; j++) {
+        var dx = strokePoints[j].x - strokePoints[j - 1].x;
+        var dy = strokePoints[j].y - strokePoints[j - 1].y;
+        len += Math.sqrt(dx * dx + dy * dy);
+      }
+      var chord = Math.sqrt((maxX - minX) * (maxX - minX) + (maxY - minY) * (maxY - minY));
+      if (chord < 20) return false;
+      var straightness = chord / (len || 1);
+      return straightness > 0.85;
+    })();
+
+    if (lineDetected) {
+      clearCanvas();
+      drawTrailCrisp(strokePoints);
+      lastResultName = 'line';
+      lastResultScore = '1.000';
+      updateDebug();
+      handleGestureAction('SHOW_INITIATIVE');
+      showFeedback('SHOW_INITIATIVE', '#007AFF', false);
       clearTimeoutId = setTimeout(clearCanvas, 800);
       return;
     }
@@ -3699,6 +3754,7 @@
     var monsterPanelCollapsed = true;
     var monsterPanelPinned = true;
     var monsterPanelDragHandler = null;
+    var initiativePanelMinimized = false;
     var monsterJustDragged = false;
     var CLICK_THRESHOLD = 10;
     var MONSTER_PANEL_GAP = 8;
@@ -4098,6 +4154,63 @@
         } else {
           panel.classList.remove('panel-locked');
           btn.textContent = '🔓';
+        }
+      });
+    });
+
+    function setInitiativeMinimized(minimized) {
+      initiativePanelMinimized = !!minimized;
+      var initPanel = document.getElementById('initiative-panel');
+      var monsterPanel = document.getElementById('monster-panel');
+      var turnPanel = document.getElementById('current-turn-panel');
+      if (initPanel) initPanel.style.display = minimized ? 'none' : '';
+      if (minimized) {
+        if (monsterPanel && monsterPanelPinned) monsterPanel.style.display = 'none';
+        if (turnPanel && currentTurnPanelPinned) turnPanel.style.display = 'none';
+      } else {
+        if (monsterPanel) monsterPanel.style.display = '';
+        if (turnPanel) turnPanel.style.display = '';
+      }
+    }
+
+    function showInitiativePanel() {
+      setInitiativeMinimized(false);
+    }
+    window.showInitiativePanel = showInitiativePanel;
+
+    // Minimize buttons (non-pinned only for monster/current-turn; initiative minimizes whole stack)
+    document.querySelectorAll('.panel-minimize-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var id = btn.getAttribute('data-panel-id');
+        if (id === 'monster-panel') {
+          if (monsterPanelPinned) return;
+          var monsterPanel = document.getElementById('monster-panel');
+          if (!monsterPanel) return;
+          monsterPanelPinned = true;
+          monsterPanel.classList.add('pinned');
+          monsterPanelCollapsed = true;
+          monsterPanel.classList.add('collapsed');
+          updateMonsterPanelPosition();
+          monsterPanelDragHandler = function(ev) {
+            if (ev.target.closest('button, input, select')) return;
+            if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+            ev.preventDefault();
+            onPointerDown(ev, monsterPanel, monsterPanel);
+          };
+          monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+        } else if (id === 'current-turn-panel') {
+          if (currentTurnPanelPinned) return;
+          var turnPanel = document.getElementById('current-turn-panel');
+          var tableBody = document.getElementById('initiative-table-body');
+          if (!turnPanel || !tableBody || !tableBody.querySelectorAll('tr').length) return;
+          setPinned(true);
+          currentTurnPanelCollapsed = true;
+          turnPanel.classList.add('collapsed');
+          updatePinnedPanelPosition();
+        } else if (id === 'initiative-panel') {
+          if (initiativePanelMinimized) return;
+          setInitiativeMinimized(true);
         }
       });
     });
