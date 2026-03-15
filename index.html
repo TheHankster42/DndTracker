@@ -603,10 +603,13 @@
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
       padding: 12px 14px 14px;
       z-index: 36;
-      display: flex;
+      display: none; /* shown by JS when there is at least one creature */
       flex-direction: column;
       touch-action: manipulation;
       cursor: default;
+    }
+    #current-turn-panel[data-visible="true"] {
+      display: flex;
     }
     #current-turn-header {
       display: flex;
@@ -644,6 +647,89 @@
       overflow-y: auto;
       font-size: 0.78rem;
       line-height: 1.35;
+    }
+    /* Pinned: hide "Current turn" and lock; show only creature content */
+    #current-turn-panel.pinned #current-turn-header {
+      display: none;
+    }
+    #current-turn-panel.pinned {
+      cursor: pointer;
+    }
+    #current-turn-panel.pinned.collapsed {
+      width: 52px;
+      min-width: 52px;
+      max-width: 52px;
+      height: 26px;
+      min-height: 26px;
+      max-height: 26px;
+      padding: 0 8px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      justify-content: center;
+      align-items: center;
+      transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    #current-turn-panel.pinned.collapsed:hover {
+      background: rgba(255, 255, 255, 1);
+      border-color: rgba(0, 122, 255, 0.35);
+      box-shadow: 0 1px 4px rgba(0, 122, 255, 0.15);
+    }
+    #current-turn-panel.pinned.collapsed:active {
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+    }
+    #current-turn-panel.pinned.collapsed #current-turn-name,
+    #current-turn-panel.pinned.collapsed #current-turn-subtitle,
+    #current-turn-panel.pinned.collapsed #current-turn-body,
+    #current-turn-panel.pinned.collapsed .current-turn-tap-hint {
+      display: none !important;
+    }
+    #current-turn-panel.pinned.collapsed .current-turn-collapsed-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: rgba(0, 0, 0, 0.75);
+      letter-spacing: 0.02em;
+      text-align: center;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    #current-turn-panel.pinned:not(.collapsed) .current-turn-collapsed-label {
+      display: none;
+    }
+    #current-turn-panel.pinned:not(.collapsed) #current-turn-name,
+    #current-turn-panel.pinned:not(.collapsed) #current-turn-subtitle,
+    #current-turn-panel.pinned:not(.collapsed) #current-turn-body {
+      display: block !important;
+    }
+    #current-turn-panel.pinned .current-turn-tap-hint {
+      display: none !important;
+    }
+    .current-turn-collapsed-label {
+      display: none;
+    }
+    .stat-block-overlay {
+      position: fixed;
+      z-index: 100;
+      background: rgba(246, 246, 246, 0.98);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      padding: 12px;
+      overflow-y: auto;
+      max-height: 70vh;
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+    .stat-block-overlay #stat-block-overlay-content {
+      margin-bottom: 12px;
+    }
+    .stat-block-overlay #stat-block-overlay-close {
+      display: block;
+      width: 100%;
     }
     #current-turn-body section {
       margin-bottom: 8px;
@@ -978,11 +1064,17 @@
       <button type="button" class="panel-lock-btn" data-panel-id="current-turn-panel" aria-label="Lock current turn panel">🔓</button>
       <span style="font-size:0.75rem;color:#6e6e73;" id="current-turn-order"></span>
     </div>
+    <span class="current-turn-collapsed-label" aria-hidden="true">Stats</span>
     <div id="current-turn-name"></div>
     <div id="current-turn-subtitle"></div>
+    <div class="current-turn-tap-hint" id="current-turn-tap-hint" style="display:none;">Tap the active row’s name, init, or AC for abilities &amp; traits</div>
     <div id="current-turn-body">
       <!-- Filled from JS based on active combatant / SRD info -->
     </div>
+  </div>
+  <div id="stat-block-overlay" class="stat-block-overlay" style="display:none;" aria-hidden="true">
+    <div id="stat-block-overlay-content"></div>
+    <button type="button" id="stat-block-overlay-close" class="secondary">Close</button>
   </div>
   <button type="button" class="btn-float" id="btn-record">Record Gesture</button>
   <button type="button" class="btn-float" id="btn-gestures">Gestures</button>
@@ -1788,6 +1880,7 @@
     });
 
     renderCurrentTurnPanel();
+    if (window.ensureCurrentTurnPanelVisibility) window.ensureCurrentTurnPanelVisibility();
   }
 
   function goToNextCombatant() {
@@ -2630,6 +2723,7 @@
 
     bodyEl.innerHTML = html;
   }
+  window.renderCurrentTurnPanel = renderCurrentTurnPanel;
 
   function createCombatantFromMonster(monster, query) {
     if (!monster) return;
@@ -3309,7 +3403,7 @@
     });
   })();
 
-  // Simple draggable panels with lock toggle
+  // Simple draggable panels with lock toggle; current-turn can only be pinned to name section
   (function initDraggablePanels() {
     var panels = [
       { id: 'monster-panel', handleSelector: 'h3' },
@@ -3318,26 +3412,168 @@
     ];
 
     var dragState = null;
-    var nextZ = 50; // base above initial CSS z-indexes
+    var nextZ = 50;
+    var currentTurnPanelPinned = false;
+    var currentTurnPanelCollapsed = false;
+    var pinnedPanelDragHandler = null;
+    var pinnedJustDragged = false;
+    var CLICK_THRESHOLD = 10;
+
+
+    function rectsOverlap(a, b) {
+      return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    function panelOverNameSection(panelRect) {
+      var tableBody = document.getElementById('initiative-table-body');
+      if (!tableBody) return false;
+      var rows = tableBody.querySelectorAll('tr');
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (row.cells.length < 2) continue;
+        var nameCell = row.cells[1];
+        var r = nameCell.getBoundingClientRect();
+        if (rectsOverlap(panelRect, r)) return true;
+      }
+      return false;
+    }
+
+    function canPinCurrentTurn(panelRect) {
+      var tableBody = document.getElementById('initiative-table-body');
+      var hasCreatures = tableBody && tableBody.querySelectorAll('tr').length > 0;
+      return hasCreatures && panelOverNameSection(panelRect);
+    }
+
+    function canStayPinned(panelRect) {
+      return panelOverNameSection(panelRect);
+    }
+
+    function ensureCurrentTurnPanelVisibility() {
+      var turnPanel = document.getElementById('current-turn-panel');
+      var tableBody = document.getElementById('initiative-table-body');
+      if (!turnPanel) return;
+      var hasCreatures = tableBody && tableBody.querySelectorAll('tr').length > 0;
+      if (!hasCreatures) {
+        turnPanel.removeAttribute('data-visible');
+        setPinned(false);
+        window._currentTurnPanelHiddenNoCreatures = true;
+        window._currentTurnPanelDefaultPinnedApplied = false;
+        return;
+      }
+      turnPanel.setAttribute('data-visible', 'true');
+      if (window._currentTurnPanelHiddenNoCreatures) {
+        window._currentTurnPanelHiddenNoCreatures = false;
+        setPinned(true);
+        currentTurnPanelCollapsed = true;
+        turnPanel.classList.add('collapsed');
+        window._currentTurnPanelDefaultPinnedApplied = true;
+      } else if (!currentTurnPanelPinned && !window._currentTurnPanelDefaultPinnedApplied) {
+        setPinned(true);
+        currentTurnPanelCollapsed = true;
+        turnPanel.classList.add('collapsed');
+        window._currentTurnPanelDefaultPinnedApplied = true;
+      }
+      updatePinnedPanelPosition();
+    }
+
+    window.ensureCurrentTurnPanelVisibility = ensureCurrentTurnPanelVisibility;
+
+    function updatePinnedPanelPosition() {
+      if (!currentTurnPanelPinned) return;
+      var turnPanel = document.getElementById('current-turn-panel');
+      var initPanel = document.getElementById('initiative-panel');
+      var tableBody = document.getElementById('initiative-table-body');
+      if (!turnPanel || !initPanel) return;
+      var hasCreatures = tableBody && tableBody.querySelectorAll('tr').length > 0;
+      if (!hasCreatures) {
+        setPinned(false);
+        return;
+      }
+      var activeRow = document.querySelector('#initiative-table-body tr.active');
+      if (!activeRow || !activeRow.cells[1] || !activeRow.cells[2] || !activeRow.cells[3]) return;
+      var nameCell = activeRow.cells[1];
+      var initCell = activeRow.cells[2];
+      var acCell = activeRow.cells[3];
+      var nameRect = nameCell.getBoundingClientRect();
+      var initRect = initCell.getBoundingClientRect();
+      var acRect = acCell.getBoundingClientRect();
+      var rowRect = activeRow.getBoundingClientRect();
+      if (currentTurnPanelCollapsed) {
+        var collapsedWidth = 52;
+        var collapsedHeight = 26;
+        var gap = 4;
+        turnPanel.style.left = (initRect.left - collapsedWidth - gap) + 'px';
+        turnPanel.style.top = (rowRect.top + (rowRect.height - collapsedHeight) / 2) + 'px';
+        turnPanel.style.width = collapsedWidth + 'px';
+      } else {
+        turnPanel.style.left = nameRect.left + 'px';
+        turnPanel.style.top = rowRect.top + 'px';
+        turnPanel.style.width = (acRect.right - nameRect.left) + 'px';
+      }
+      turnPanel.style.right = 'auto';
+      var initZ = parseInt(initPanel.style.zIndex || '0', 10) || 50;
+      turnPanel.style.zIndex = String(initZ + 1);
+    }
+
+    window.updatePinnedPanelPosition = updatePinnedPanelPosition;
+
+    function setPinned(pinned) {
+      var turnPanel = document.getElementById('current-turn-panel');
+      if (!turnPanel) return;
+      currentTurnPanelPinned = !!pinned;
+      if (pinned) {
+        turnPanel.classList.add('pinned');
+        currentTurnPanelCollapsed = false;
+        turnPanel.classList.remove('collapsed');
+        updatePinnedPanelPosition();
+        turnPanel.addEventListener('click', pinnedPanelClickHandler);
+        pinnedPanelDragHandler = function(e) {
+          if (e.target.closest('button, input, select')) return;
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          e.preventDefault();
+          onPointerDown(e, turnPanel, turnPanel);
+        };
+        turnPanel.addEventListener('pointerdown', pinnedPanelDragHandler);
+      } else {
+        turnPanel.classList.remove('pinned', 'collapsed');
+        turnPanel.style.width = '';
+        turnPanel.style.right = 'auto';
+        turnPanel.removeEventListener('click', pinnedPanelClickHandler);
+        if (pinnedPanelDragHandler) {
+          turnPanel.removeEventListener('pointerdown', pinnedPanelDragHandler);
+          pinnedPanelDragHandler = null;
+        }
+      }
+    }
+
+    function pinnedPanelClickHandler(e) {
+      /* Toggle is handled in onPointerUp when movement < threshold; avoid double-toggle */
+      if (e.target.closest('button, input, select')) return;
+      if (pinnedJustDragged) pinnedJustDragged = false;
+    }
 
     function onPointerDown(e, panel, handle) {
-      // Don't start drag when the user tapped a button, input, or select
       if (e.target && e.target.closest('button, input, select')) return;
       if (panel.getAttribute('data-locked') === 'true') return;
-      // Only left mouse or primary pointer
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
       var rect = panel.getBoundingClientRect();
-      // Freeze current visual position into explicit left/top before removing transforms
       panel.style.left = rect.left + 'px';
       panel.style.top = rect.top + 'px';
       panel.style.transform = 'none';
-      // Bring this panel to front
-      panel.style.zIndex = String(nextZ++);
+      panel.style.position = 'fixed';
+      panel.style.zIndex = (panel.id === 'current-turn-panel') ? '9999' : String(nextZ++);
+      if (panel.id === 'initiative-panel' && currentTurnPanelPinned) {
+        var turnPanel = document.getElementById('current-turn-panel');
+        if (turnPanel) turnPanel.style.zIndex = String(nextZ++);
+      }
       dragState = {
         panel: panel,
         offsetX: e.clientX - rect.left,
-        offsetY: e.clientY - rect.top
+        offsetY: e.clientY - rect.top,
+        originalId: panel.id,
+        startLeft: panel.style.left ? parseFloat(panel.style.left) : rect.left,
+        startTop: panel.style.top ? parseFloat(panel.style.top) : rect.top
       };
     }
 
@@ -3349,9 +3585,96 @@
       var y = e.clientY - dragState.offsetY;
       panel.style.left = x + 'px';
       panel.style.top = y + 'px';
+      if (dragState.originalId === 'initiative-panel' && currentTurnPanelPinned) {
+        updatePinnedPanelPosition();
+      }
+    }
+
+    var openStatBlockOverlayRef = function() {};
+
+    function bindStatBlockOverlay() {
+      var overlay = document.getElementById('stat-block-overlay');
+      var content = document.getElementById('stat-block-overlay-content');
+      var closeBtn = document.getElementById('stat-block-overlay-close');
+      var bodyEl = document.getElementById('current-turn-body');
+      if (!overlay || !content || !bodyEl) return;
+      function openOverlay() {
+        var activeRow = document.querySelector('#initiative-table-body tr.active');
+        if (!activeRow || activeRow.cells.length < 4) return;
+        content.innerHTML = bodyEl.innerHTML;
+        var nameCell = activeRow.cells[1];
+        var acCell = activeRow.cells[3];
+        var r1 = nameCell.getBoundingClientRect();
+        var r3 = acCell.getBoundingClientRect();
+        overlay.style.left = r1.left + 'px';
+        overlay.style.top = r1.top + 'px';
+        overlay.style.width = (r3.right - r1.left) + 'px';
+        overlay.style.minHeight = r1.height + 'px';
+        overlay.style.maxHeight = '70vh';
+        overlay.style.display = 'block';
+        overlay.setAttribute('aria-hidden', 'false');
+      }
+      function closeOverlay() {
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+      openStatBlockOverlayRef = openOverlay;
+      closeBtn.onclick = closeOverlay;
+      overlay.onclick = function(e) {
+        if (e.target === overlay || e.target.closest('#stat-block-overlay-close')) closeOverlay();
+      };
+      content.onclick = function(e) { e.stopPropagation(); };
+    }
+    bindStatBlockOverlay();
+
+    (function initTableBodyOverlayClick() {
+      var tableBody = document.getElementById('initiative-table-body');
+      if (!tableBody) return;
+      tableBody.addEventListener('click', function(e) {
+        var row = e.target.closest('tr');
+        if (!row || !row.classList.contains('active')) return;
+        if (e.target.closest('.hp-cell, .controls-cell')) return;
+        var td = e.target.closest('td');
+        if (!td || (row.cells[1] !== td && row.cells[2] !== td && row.cells[3] !== td)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openStatBlockOverlayRef();
+      });
+    })();
+
+    function closeStatBlockOverlay() {
+      var overlay = document.getElementById('stat-block-overlay');
+      if (overlay) overlay.style.display = 'none';
     }
 
     function onPointerUp() {
+      if (dragState && dragState.originalId === 'current-turn-panel') {
+        var turnPanel = document.getElementById('current-turn-panel');
+        var panelRect = turnPanel.getBoundingClientRect();
+        if (currentTurnPanelPinned) {
+          var dx = Math.abs(parseFloat(turnPanel.style.left || 0) - (dragState.startLeft || 0));
+          var dy = Math.abs(parseFloat(turnPanel.style.top || 0) - (dragState.startTop || 0));
+          if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
+            currentTurnPanelCollapsed = !currentTurnPanelCollapsed;
+            if (currentTurnPanelCollapsed) {
+              turnPanel.classList.add('collapsed');
+            } else {
+              turnPanel.classList.remove('collapsed');
+              if (window.renderCurrentTurnPanel) window.renderCurrentTurnPanel();
+            }
+            updatePinnedPanelPosition();
+          } else {
+            pinnedJustDragged = true;
+            if (!canStayPinned(panelRect)) {
+              setPinned(false);
+            } else {
+              updatePinnedPanelPosition();
+            }
+          }
+        } else if (canPinCurrentTurn(panelRect)) {
+          setPinned(true);
+        }
+      }
       dragState = null;
     }
 
@@ -3361,12 +3684,21 @@
       var handle = panel.querySelector(cfg.handleSelector);
       if (!handle) return;
       handle.addEventListener('pointerdown', function(e) { onPointerDown(e, panel, handle); });
-      // Also bring to front on simple click/tap anywhere in the panel
       panel.addEventListener('mousedown', function() {
-        panel.style.zIndex = String(nextZ++);
+        var z = nextZ++;
+        panel.style.zIndex = String(z);
+        if (currentTurnPanelPinned && panel.id === 'initiative-panel') {
+          var turnPanel = document.getElementById('current-turn-panel');
+          if (turnPanel) turnPanel.style.zIndex = String(nextZ++);
+        }
       });
       panel.addEventListener('touchstart', function() {
-        panel.style.zIndex = String(nextZ++);
+        var z = nextZ++;
+        panel.style.zIndex = String(z);
+        if (currentTurnPanelPinned && panel.id === 'initiative-panel') {
+          var turnPanel = document.getElementById('current-turn-panel');
+          if (turnPanel) turnPanel.style.zIndex = String(nextZ++);
+        }
       }, { passive: true });
     });
 
