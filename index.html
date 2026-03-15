@@ -692,6 +692,18 @@
     #monster-panel h3:active {
       cursor: grabbing;
     }
+    /* During drag: no backdrop-filter so header/title don't shift (Firefox) */
+    #monster-panel.panel-dragging {
+      background: rgba(248, 248, 248, 0.98);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      will-change: transform;
+      backface-visibility: hidden;
+    }
+    /* Slight down offset so title always looks like pressed state (no shift on mousedown in Firefox) */
+    #monster-panel h3 {
+      transform: translateY(1px);
+    }
     #monster-panel.pinned .panel-lock-btn,
     #monster-panel.pinned .panel-minimize-btn {
       display: none;
