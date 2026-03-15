@@ -3972,18 +3972,28 @@
 
     window.updatePinnedPanelPosition = updatePinnedPanelPosition;
 
+    /* Hide panel, apply state change, run position update, then show – avoids flicker on collapse/expand/pin */
+    function positionPanelAfterStateChange(panel, stateChangeFn, updateFn) {
+      if (!panel) return;
+      panel.style.visibility = 'hidden';
+      if (stateChangeFn) stateChangeFn();
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          if (updateFn) updateFn();
+          panel.style.visibility = '';
+        });
+      });
+    }
+
     function setPinned(pinned) {
       var turnPanel = document.getElementById('current-turn-panel');
       if (!turnPanel) return;
       currentTurnPanelPinned = !!pinned;
       if (pinned) {
+        turnPanel.style.visibility = 'hidden';
         turnPanel.classList.add('pinned');
         currentTurnPanelCollapsed = false;
         turnPanel.classList.remove('collapsed');
-        /* Defer so layout has applied (pinned/collapsed) before we read rects */
-        requestAnimationFrame(function() {
-          requestAnimationFrame(updatePinnedPanelPosition);
-        });
         turnPanel.addEventListener('click', pinnedPanelClickHandler);
         pinnedPanelDragHandler = function(e) {
           if (e.target.closest('button, input, select')) return;
@@ -3992,6 +4002,12 @@
           onPointerDown(e, turnPanel, turnPanel);
         };
         turnPanel.addEventListener('pointerdown', pinnedPanelDragHandler);
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            updatePinnedPanelPosition();
+            turnPanel.style.visibility = '';
+          });
+        });
       } else {
         turnPanel.classList.remove('pinned', 'collapsed');
         turnPanel.style.width = '';
@@ -4131,16 +4147,15 @@
           var dx = Math.abs(panelRect.left - (dragState.startLeft || 0));
           var dy = Math.abs(panelRect.top - (dragState.startTop || 0));
           if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
-            currentTurnPanelCollapsed = !currentTurnPanelCollapsed;
-            if (currentTurnPanelCollapsed) {
-              turnPanel.classList.add('collapsed');
-            } else {
-              turnPanel.classList.remove('collapsed');
-              if (window.renderCurrentTurnPanel) window.renderCurrentTurnPanel();
-            }
-            requestAnimationFrame(function() {
-              requestAnimationFrame(updatePinnedPanelPosition);
-            });
+            positionPanelAfterStateChange(turnPanel, function() {
+              currentTurnPanelCollapsed = !currentTurnPanelCollapsed;
+              if (currentTurnPanelCollapsed) {
+                turnPanel.classList.add('collapsed');
+              } else {
+                turnPanel.classList.remove('collapsed');
+                if (window.renderCurrentTurnPanel) window.renderCurrentTurnPanel();
+              }
+            }, updatePinnedPanelPosition);
           } else {
             pinnedJustDragged = true;
             if (!canStayPinned(panelRect)) {
@@ -4163,36 +4178,33 @@
             if (monsterPanelPinned) {
               monsterPanelCollapsed = !monsterPanelCollapsed;
               if (monsterPanelCollapsed) {
-                monsterPanel.classList.add('collapsed');
-                requestAnimationFrame(function() {
-                  requestAnimationFrame(updateMonsterPanelPosition);
-                });
-                monsterPanelDragHandler = function(e) {
-                  if (e.target.closest('button, input, select')) return;
-                  if (e.pointerType === 'mouse' && e.button !== 0) return;
-                  e.preventDefault();
-                  onPointerDown(e, monsterPanel, monsterPanel);
-                };
-                monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+                positionPanelAfterStateChange(monsterPanel, function() {
+                  monsterPanel.classList.add('collapsed');
+                  monsterPanelDragHandler = function(e) {
+                    if (e.target.closest('button, input, select')) return;
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    e.preventDefault();
+                    onPointerDown(e, monsterPanel, monsterPanel);
+                  };
+                  monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+                }, updateMonsterPanelPosition);
               } else {
-                monsterPanel.classList.remove('collapsed');
-                requestAnimationFrame(function() {
-                  requestAnimationFrame(updateMonsterPanelPosition);
-                });
-                if (monsterPanelDragHandler) {
-                  monsterPanel.removeEventListener('pointerdown', monsterPanelDragHandler);
-                  monsterPanelDragHandler = null;
-                }
+                positionPanelAfterStateChange(monsterPanel, function() {
+                  monsterPanel.classList.remove('collapsed');
+                  if (monsterPanelDragHandler) {
+                    monsterPanel.removeEventListener('pointerdown', monsterPanelDragHandler);
+                    monsterPanelDragHandler = null;
+                  }
+                }, updateMonsterPanelPosition);
               }
             }
           } else {
             monsterJustDragged = true;
             if (monsterPanelNearInit(panelRect)) {
-              monsterPanelPinned = true;
-              monsterPanel.classList.add('pinned');
-              requestAnimationFrame(function() {
-                requestAnimationFrame(updateMonsterPanelPosition);
-              });
+              positionPanelAfterStateChange(monsterPanel, function() {
+                monsterPanelPinned = true;
+                monsterPanel.classList.add('pinned');
+              }, updateMonsterPanelPosition);
             } else {
               monsterPanelPinned = false;
               if (monsterPanel) {
@@ -4212,13 +4224,17 @@
           }
         }
       }
-      /* Commit drag position (read rect while still dragging so no jump), then clear dragging state */
+      /* Commit drag position; if current-turn stayed pinned, don't overwrite – it was just snapped by updatePinnedPanelPosition */
       if (dragState && dragState.panel) {
         var panel = dragState.panel;
-        var rect = panel.getBoundingClientRect();
-        panel.style.left = rect.left + 'px';
-        panel.style.top = rect.top + 'px';
-        panel.style.transform = 'none';
+        if (panel.id === 'current-turn-panel' && currentTurnPanelPinned) {
+          panel.style.transform = 'none';
+        } else {
+          var rect = panel.getBoundingClientRect();
+          panel.style.left = rect.left + 'px';
+          panel.style.top = rect.top + 'px';
+          panel.style.transform = 'none';
+        }
         panel.classList.remove('panel-dragging');
       }
       dragState = null;
@@ -4327,29 +4343,38 @@
           if (monsterPanelPinned) return;
           var monsterPanel = document.getElementById('monster-panel');
           if (!monsterPanel) return;
-          monsterPanelPinned = true;
-          monsterPanel.classList.add('pinned');
-          monsterPanelCollapsed = true;
-          monsterPanel.classList.add('collapsed');
-          requestAnimationFrame(function() {
-            requestAnimationFrame(updateMonsterPanelPosition);
-          });
-          monsterPanelDragHandler = function(ev) {
-            if (ev.target.closest('button, input, select')) return;
-            if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-            ev.preventDefault();
-            onPointerDown(ev, monsterPanel, monsterPanel);
-          };
-          monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+          positionPanelAfterStateChange(monsterPanel, function() {
+            monsterPanelPinned = true;
+            monsterPanel.classList.add('pinned');
+            monsterPanelCollapsed = true;
+            monsterPanel.classList.add('collapsed');
+            monsterPanelDragHandler = function(ev) {
+              if (ev.target.closest('button, input, select')) return;
+              if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+              ev.preventDefault();
+              onPointerDown(ev, monsterPanel, monsterPanel);
+            };
+            monsterPanel.addEventListener('pointerdown', monsterPanelDragHandler);
+          }, updateMonsterPanelPosition);
         } else if (id === 'current-turn-panel') {
           if (currentTurnPanelPinned) return;
           var turnPanel = document.getElementById('current-turn-panel');
           var tableBody = document.getElementById('initiative-table-body');
           if (!turnPanel || !tableBody || !tableBody.querySelectorAll('tr').length) return;
-          setPinned(true);
-          currentTurnPanelCollapsed = true;
-          turnPanel.classList.add('collapsed');
-          /* Position update already scheduled in setPinned (deferred for correct layout) */
+          positionPanelAfterStateChange(turnPanel, function() {
+            currentTurnPanelPinned = true;
+            turnPanel.classList.add('pinned');
+            currentTurnPanelCollapsed = true;
+            turnPanel.classList.add('collapsed');
+            turnPanel.addEventListener('click', pinnedPanelClickHandler);
+            pinnedPanelDragHandler = function(e) {
+              if (e.target.closest('button, input, select')) return;
+              if (e.pointerType === 'mouse' && e.button !== 0) return;
+              e.preventDefault();
+              onPointerDown(e, turnPanel, turnPanel);
+            };
+            turnPanel.addEventListener('pointerdown', pinnedPanelDragHandler);
+          }, updatePinnedPanelPosition);
         } else if (id === 'initiative-panel') {
           if (initiativePanelMinimized) return;
           setInitiativeMinimized(true);
