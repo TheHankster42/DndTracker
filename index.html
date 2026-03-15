@@ -444,6 +444,12 @@
       -moz-appearance: textfield;
       appearance: textfield;
     }
+    .hp-editor .hp-temp-death-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
     /* Temp HP row: label + number input (different from main HP) */
     .hp-editor .hp-temp-row {
       display: flex;
@@ -539,6 +545,39 @@
       display: inline-block;
       font-size: 0.65rem;
       color: #555;
+    }
+    .death-saves-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .death-saves-label {
+      font-size: 0.65rem;
+      color: #555;
+      margin-right: 2px;
+    }
+    .death-saves-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: 2px;
+      width: min-content;
+    }
+    .death-save-circle {
+      width: 14px;
+      height: 14px;
+      border: 1px solid #888;
+      border-radius: 50%;
+      cursor: pointer;
+      display: inline-block;
+      box-sizing: border-box;
+    }
+    .death-save-circle.filled {
+      background: #333;
+    }
+    .death-save-circle:hover {
+      border-color: #333;
     }
     #monster-panel {
       position: fixed;
@@ -1641,8 +1680,29 @@
     return {
       tempHp: 0,
       conditions: [],
-      isConcentrating: false
+      isConcentrating: false,
+      deathSaveSuccesses: 0,
+      deathSaveFailures: 0
     };
+  }
+
+  function applyZeroHpState(c) {
+    if (!c.conditions) c.conditions = [];
+    ['Incapacitated', 'Prone', 'Unconscious'].forEach(function(name) {
+      if (c.conditions.indexOf(name) === -1) c.conditions.push(name);
+    });
+    c.isConcentrating = false;
+    if (c.deathSaveSuccesses == null) c.deathSaveSuccesses = 0;
+    if (c.deathSaveFailures == null) c.deathSaveFailures = 0;
+  }
+
+  function applyAboveZeroHpState(c) {
+    if (!c.conditions) return;
+    c.conditions = c.conditions.filter(function(name) {
+      return name !== 'Incapacitated' && name !== 'Unconscious';
+    });
+    c.deathSaveSuccesses = 0;
+    c.deathSaveFailures = 0;
   }
 
   function sortCombatants() {
@@ -1762,7 +1822,7 @@
         noneOpt.value = 'None';
         noneOpt.textContent = 'Clear all';
         condSelect.appendChild(noneOpt);
-        var condOptions = ['Blinded','Bloodied','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
+        var condOptions = ['Blinded','Bloodied','Charmed','Dead','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
         condOptions.forEach(function(name) {
           var opt = document.createElement('option');
           opt.value = name;
@@ -1795,6 +1855,83 @@
         statusSpan.className = 'status-summary controls-secondary-row';
         tdControls.appendChild(statusSpan);
 
+        // Death saves (NPCs at 0 HP only): 3x2 grid, top = successes, bottom = failures
+        var deathSaveContainer = document.createElement('div');
+        deathSaveContainer.className = 'death-saves-row controls-secondary-row';
+        deathSaveContainer.style.display = (c.srd && c.maxHp > 0 && c.hp <= 0 && c.conditions.indexOf('Dead') === -1) ? '' : 'none';
+        var deathSaveLabel = document.createElement('span');
+        deathSaveLabel.className = 'death-saves-label';
+        deathSaveLabel.textContent = 'Death saves';
+        deathSaveContainer.appendChild(deathSaveLabel);
+        var deathSaveGrid = document.createElement('div');
+        deathSaveGrid.className = 'death-saves-grid';
+        var successCircles = [];
+        var failureCircles = [];
+        for (var row = 0; row < 2; row++) {
+          for (var col = 0; col < 3; col++) {
+            var circle = document.createElement('span');
+            circle.className = 'death-save-circle';
+            circle.dataset.row = String(row);
+            circle.dataset.col = String(col);
+            if (row === 0) successCircles.push(circle); else failureCircles.push(circle);
+            deathSaveGrid.appendChild(circle);
+          }
+        }
+        deathSaveContainer.appendChild(deathSaveGrid);
+        var hpEditorEl = tdHp.querySelector('.hp-editor');
+        if (hpEditorEl) {
+          var tempRow = hpEditorEl.querySelector('.hp-temp-row');
+          var hpMetaElRef = hpEditorEl.querySelector('.hp-meta');
+          var tempDeathWrapper = document.createElement('div');
+          tempDeathWrapper.className = 'hp-temp-death-wrapper';
+          if (tempRow) tempDeathWrapper.appendChild(tempRow);
+          tempDeathWrapper.appendChild(deathSaveContainer);
+          if (hpMetaElRef) hpEditorEl.insertBefore(tempDeathWrapper, hpMetaElRef);
+          else hpEditorEl.appendChild(tempDeathWrapper);
+        }
+
+        function syncDeathSaveCircles() {
+          var succ = (c.deathSaveSuccesses != null) ? c.deathSaveSuccesses : 0;
+          var fail = (c.deathSaveFailures != null) ? c.deathSaveFailures : 0;
+          successCircles.forEach(function(el, i) { el.classList.toggle('filled', i < succ); });
+          failureCircles.forEach(function(el, i) { el.classList.toggle('filled', i < fail); });
+        }
+        function applyDeathSaveResult(isSuccess, index) {
+          if (isSuccess) {
+            if (index < (c.deathSaveSuccesses || 0)) c.deathSaveSuccesses = index;
+            else if ((c.deathSaveSuccesses || 0) < 3) c.deathSaveSuccesses = (c.deathSaveSuccesses || 0) + 1;
+          } else {
+            if (index < (c.deathSaveFailures || 0)) c.deathSaveFailures = index;
+            else if ((c.deathSaveFailures || 0) < 3) {
+              c.deathSaveFailures = (c.deathSaveFailures || 0) + 1;
+              if (c.deathSaveFailures >= 3) {
+                c.conditions = ['Dead'];
+                deathSaveContainer.style.display = 'none';
+                updateStatusSummary();
+                if (tr) tr.classList.add('dead');
+                if (li) li.classList.add('dead');
+              }
+            }
+          }
+          syncDeathSaveCircles();
+          renderCurrentTurnPanel();
+        }
+        syncDeathSaveCircles();
+        successCircles.forEach(function(circle, i) {
+          circle.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            if (!c.srd || c.hp > 0 || c.conditions.indexOf('Dead') !== -1) return;
+            applyDeathSaveResult(true, i);
+          });
+        });
+        failureCircles.forEach(function(circle, i) {
+          circle.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            if (!c.srd || c.hp > 0 || c.conditions.indexOf('Dead') !== -1) return;
+            applyDeathSaveResult(false, i);
+          });
+        });
+
         tr.appendChild(tdOrder);
         tr.appendChild(tdName);
         tr.appendChild(tdInit);
@@ -1808,6 +1945,7 @@
         var hpTempInput = tdHp.querySelector('.hp-temp-input');
         var hpMetaEl = tdHp.querySelector('.hp-meta');
         function updateStatusSummary() {
+          if (c.conditions && c.conditions.indexOf('Dead') !== -1) c.conditions = ['Dead'];
           var condText = (c.conditions && c.conditions.length) ? c.conditions.join(', ') : '';
           var concText = c.isConcentrating ? 'Conc' : '';
           var parts = [];
@@ -1867,7 +2005,9 @@
             if (isNaN(val) || val < 0) val = 0;
             if (val > c.maxHp) val = c.maxHp;
             c.hp = val;
+            if (val <= 0) applyZeroHpState(c); else applyAboveZeroHpState(c);
             if (hpCurrentInput) hpCurrentInput.value = val;
+            if (concCheckbox) concCheckbox.checked = !!c.isConcentrating;
             setHpBarFills();
             updateBloodiedCondition();
             if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
@@ -1880,6 +2020,8 @@
               if (c.hp <= 0) li.classList.add('dead');
               else li.classList.remove('dead');
             }
+            if (deathSaveContainer) deathSaveContainer.style.display = (c.srd && c.hp <= 0 && c.conditions.indexOf('Dead') === -1) ? '' : 'none';
+            if (typeof syncDeathSaveCircles === 'function') syncDeathSaveCircles();
             renderCurrentTurnPanel();
           });
         }
@@ -1890,8 +2032,10 @@
             if (isNaN(val) || val < 0) val = 0;
             if (val > c.maxHp) val = c.maxHp;
             c.hp = val;
+            if (val <= 0) applyZeroHpState(c); else applyAboveZeroHpState(c);
             hpCurrentInput.value = val;
             if (hpMainEl) hpMainEl.value = val;
+            if (concCheckbox) concCheckbox.checked = !!c.isConcentrating;
             setHpBarFills();
             updateBloodiedCondition();
             if (nameDeathSpan) nameDeathSpan.textContent = (c.hp <= 0 ? '☠' : '');
@@ -1904,6 +2048,8 @@
               if (c.hp <= 0) li.classList.add('dead');
               else li.classList.remove('dead');
             }
+            if (deathSaveContainer) deathSaveContainer.style.display = (c.srd && c.hp <= 0 && c.conditions.indexOf('Dead') === -1) ? '' : 'none';
+            if (typeof syncDeathSaveCircles === 'function') syncDeathSaveCircles();
             renderCurrentTurnPanel();
           });
         }
@@ -1942,13 +2088,14 @@
             if (val === 'None') {
               // Clear all conditions except auto-managed ones like Bloodied
               c.conditions = c.conditions.filter(function(name) { return name === 'Bloodied'; });
+            } else if (val === 'Dead') {
+              c.conditions = ['Dead'];
             } else {
+              if (c.conditions.indexOf('Dead') !== -1) c.conditions = [];
               var idxCond = c.conditions.indexOf(val);
               if (idxCond === -1) {
-                // Add condition
                 c.conditions.push(val);
               } else {
-                // Remove condition if already present
                 c.conditions.splice(idxCond, 1);
               }
             }
